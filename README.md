@@ -43,7 +43,7 @@ FastAPI service covering three handbook stacks:
 
    Seed accounts: `admin@soundsync.dev` / `admin12345` (admin), `alice@soundsync.dev` / `alice12345`, `bob@soundsync.dev` / `bob1234567`.
 
-   Seed catalog: 8 songs across 4 albums and 4 categories (`love`, `melody`, `motivation`, `sad`); album covers are generated into `media/covers/`. The seed is idempotent, so re-running it is safe. Migration `0003` creates the `pg_trgm` extension (trusted since PostgreSQL 13, so the database owner can create it).
+   Seed catalog: 8 songs across 4 albums and 4 categories (`love`, `melody`, `motivation`, `sad`); album covers are generated into `media/covers/` and playable sample audio (WAV, ~14 MB total) into `media/audio/`. The seed is idempotent, so re-running it is safe. Migration `0003` creates the `pg_trgm` extension (trusted since PostgreSQL 13, so the database owner can create it).
 
 4. Run and verify:
 
@@ -77,4 +77,10 @@ python -m scripts.export_openapi
 pytest
 ```
 
-Tests run against PostgreSQL (`TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`). Each test runs inside a transaction that is rolled back, so the database is left unchanged. `tests/test_auth.py` covers the Phase 2 auth cases and `tests/test_songs.py` / `tests/test_library.py` cover the Phase 3 catalog and library cases in `docs/qa/acceptance_matrix.md`. Catalog tests replace the `songs` table with the seed catalog inside the rolled-back transaction, so they do not depend on what is in your database.
+Tests run against PostgreSQL (`TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`). Each test runs inside a transaction that is rolled back, so the database is left unchanged. `tests/test_auth.py` covers the Phase 2 auth cases and `tests/test_songs.py` / `tests/test_library.py` cover the Phase 3 catalog and library cases in `docs/qa/acceptance_matrix.md`. Catalog tests replace the `songs` table with the seed catalog inside the rolled-back transaction, so they do not depend on what is in your database. `tests/test_playback.py` covers Phase 4 (seed audio, media range requests, play logging, recently-played query plan).
+
+Recently-played query benchmark (rolled back, leaves no data):
+
+```powershell
+python -m scripts.benchmark_recently_played 1000 200
+```

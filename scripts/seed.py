@@ -1,10 +1,13 @@
 """Seed fixtures for local dev and QA. Run from backend/: python -m scripts.seed
 
-Idempotent: users are matched by email, songs by (title, artist). Album cover art is
-generated as SVG under MEDIA_ROOT/covers so the catalog renders without external assets.
+Idempotent: users are matched by email, songs by (title, artist). Album cover art (SVG) and
+sample audio (WAV, exactly `duration_seconds` long) are generated under MEDIA_ROOT so the
+catalog renders and plays end-to-end without external assets.
 """
 
+import math
 import re
+import wave
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -67,6 +70,66 @@ def _cover_svg(album: str, artist: str, category: str) -> str:
 """
 
 
+AUDIO_SAMPLE_RATE = 8000  # 8 kHz, 8-bit mono: ~8 KB per second of audio
+_NOTE_SECONDS = 0.5
+
+# Four-note arpeggio (Hz) looped for each category's sample track.
+CATEGORY_ARPEGGIOS = {
+    "melody": (261.63, 329.63, 392.00, 523.25),  # C major
+    "love": (349.23, 440.00, 523.25, 659.25),  # F major 7-ish
+    "motivation": (392.00, 493.88, 587.33, 783.99),  # G major
+    "sad": (220.00, 261.63, 329.63, 440.00),  # A minor
+}
+
+
+def audio_url_for(title: str) -> str:
+    return f"{settings.MEDIA_URL_PREFIX}/audio/{_slug(title)}.wav"
+
+
+def _arpeggio_loop(category: str) -> bytes:
+    notes = CATEGORY_ARPEGGIOS.get(category, CATEGORY_ARPEGGIOS["melody"])
+    per_note = int(AUDIO_SAMPLE_RATE * _NOTE_SECONDS)
+    out = bytearray()
+    for freq in notes:
+        for n in range(per_note):
+            t = n / AUDIO_SAMPLE_RATE
+            envelope = math.exp(-4.0 * t)
+            value = envelope * (0.7 * math.sin(2 * math.pi * freq * t)
+                                + 0.3 * math.sin(math.pi * freq * t))
+            out.append(128 + int(90 * value))
+    return bytes(out)
+
+
+def build_wav_frames(category: str, duration_seconds: int) -> bytes:
+    """8-bit unsigned PCM frames, exactly `duration_seconds` long, fading out over the last second."""
+    total = AUDIO_SAMPLE_RATE * duration_seconds
+    loop = _arpeggio_loop(category)
+    frames = bytearray((loop * (total // len(loop) + 1))[:total])
+    fade = min(AUDIO_SAMPLE_RATE, total)
+    for i in range(fade):
+        idx = total - fade + i
+        frames[idx] = 128 + int((frames[idx] - 128) * (1 - i / fade))
+    return bytes(frames)
+
+
+def write_wav(path: Path, category: str, duration_seconds: int) -> None:
+    expected_size = 44 + AUDIO_SAMPLE_RATE * duration_seconds
+    if path.exists() and path.stat().st_size == expected_size:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(1)
+        wav.setframerate(AUDIO_SAMPLE_RATE)
+        wav.writeframes(build_wav_frames(category, duration_seconds))
+
+
+def write_audio() -> None:
+    audio_dir = Path(settings.MEDIA_ROOT) / "audio"
+    for s in SONGS:
+        write_wav(audio_dir / f"{_slug(s['title'])}.wav", s["category"], s["duration_seconds"])
+
+
 def write_covers() -> None:
     covers_dir = Path(settings.MEDIA_ROOT) / "covers"
     covers_dir.mkdir(parents=True, exist_ok=True)
@@ -81,6 +144,7 @@ def write_covers() -> None:
 
 def run() -> None:
     write_covers()
+    write_audio()
     with SessionLocal() as db:
         for u in USERS:
             if not user_repo.get_by_email(db, u["email"]):
@@ -93,22 +157,18 @@ def run() -> None:
                     )
                 )
 
-        for i, s in enumerate(SONGS, start=1):
+        for s in SONGS:
             song = db.scalars(
                 select(Song).where(Song.title == s["title"], Song.artist == s["artist"])
             ).first()
             if song is None:
-                db.add(
-                    Song(
-                        **s,
-                        audio_url=f"{settings.MEDIA_URL_PREFIX}/audio/sample-{i}.mp3",
-                        cover_url=cover_url_for(s["album"]),
-                    )
-                )
+                song = Song(**s)
+                db.add(song)
             else:
                 for field, value in s.items():
                     setattr(song, field, value)
-                song.cover_url = cover_url_for(s["album"])
+            song.audio_url = audio_url_for(s["title"])
+            song.cover_url = cover_url_for(s["album"])
 
         db.commit()
     print("Seed complete.")

@@ -1,19 +1,20 @@
 # Schema Note (DATA → BE)
 
-Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0003`.
+Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0004`.
 
 | Migration | Change |
 | --- | --- |
 | `0001` | Initial schema (all tables below) |
 | `0002` | `users`: `ck_users_email_lowercase` (`email = lower(email)`) and `ck_users_password_hash_bcrypt` (`password_hash ~ '^\$2[aby]\$'`) |
 | `0003` | Catalog/library indexes: `pg_trgm` extension; GIN trigram indexes `ix_songs_{title,artist,album}_trgm` (substring search); `ix_songs_category_lower` on `lower(category)` (category filter); `ix_liked_songs_user_liked_at`, `ix_liked_songs_song_id`, `ix_recently_played_song_id`. `liked_at` / `played_at` default to `clock_timestamp()` so rows written in one transaction keep their real order |
+| `0004` | `recently_played`: replaces `ix_recently_played_user_played_at` with `ix_recently_played_user_played_at_id` (`user_id`, `played_at DESC`, `id DESC`), matching the history query's `ORDER BY` so the page is read straight off the index with no sort step |
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
 | `users` | `id`, `username`, `email` (unique, lower-case), `password_hash`, `is_admin`, `created_at` | DB rejects duplicate emails, non-lower-case emails, and any `password_hash` that is not a bcrypt hash |
 | `songs` | `id`, `title`, `artist`, `album`, `category`, `duration_seconds`, `audio_url`, `cover_url` | B-tree indexes on title/artist/album/category; trigram indexes for search; `lower(category)` index |
 | `liked_songs` | PK (`user_id`, `song_id`), `liked_at` | index (`user_id`, `liked_at`) for "newest first"; index `song_id`; cascades on user/song delete |
-| `recently_played` | `id`, `user_id`, `song_id`, `played_at` | full play history (a replay adds a new row); index (`user_id`, `played_at`); index `song_id`; cascades on user/song delete |
+| `recently_played` | `id`, `user_id`, `song_id`, `played_at` | full play history (a replay adds a new row); index (`user_id`, `played_at DESC`, `id DESC`); index `song_id`; cascades on user/song delete |
 | `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed` |
 | `room_participants` | PK (`room_id`, `user_id`), `joined_at` | row deleted on leave; cascades on room delete |
 
@@ -29,7 +30,20 @@ Repository mapping (BE): `user_repo` → `users`; `song_repo` → `songs`; `libr
 | `GET /users/me/liked-songs` | current user only | `liked_at` desc, `song_id` desc |
 | `GET /users/me/recently-played?limit=` | current user only; 1–100 (default 20) | `played_at` desc, `id` desc |
 
-Seed catalog (`python -m scripts.seed`, idempotent): 8 songs, 4 albums × 2 songs, 4 categories (`love`, `melody`, `motivation`, `sad`) × 2 songs. Album covers are generated as SVG under `MEDIA_ROOT/covers/` (e.g. `/media/covers/calm-skies.svg`). Seed audio files (`/media/audio/sample-N.mp3`) are supplied in Phase 4.
+Seed catalog (`python -m scripts.seed`, idempotent): 8 songs, 4 albums × 2 songs, 4 categories (`love`, `melody`, `motivation`, `sad`) × 2 songs. Album covers are generated as SVG under `MEDIA_ROOT/covers/` (e.g. `/media/covers/calm-skies.svg`). Audio is generated as WAV (8 kHz, 8-bit mono, ~8 KB/s) under `MEDIA_ROOT/audio/` (e.g. `/media/audio/rise-up.wav`); each file is exactly the song's `duration_seconds` long. `/media` supports HTTP range requests (206), which browsers need for seeking.
+
+## Recently-played performance (Phase 4)
+
+Target: the history page query (`GET /users/me/recently-played`, 20 rows) runs in **p95 ≤ 10 ms** and the plan uses `ix_recently_played_user_played_at_id` with **no sort node**.
+
+Measure with `python -m scripts.benchmark_recently_played [users] [plays_per_user]` (inserts synthetic history inside a rolled-back transaction). Result on 2026-10-03, PostgreSQL 18, 1,000 users × 200 plays (200,000 rows):
+
+| Index | Plan | DB execution | API query p50 / p95 |
+| --- | --- | --- | --- |
+| `0003` (`user_id`, `played_at`) | Index Scan + **Incremental Sort** | 0.13 ms | 0.89 / 1.95 ms |
+| `0004` (`user_id`, `played_at DESC`, `id DESC`) | Index Scan only (no sort) | 0.46 ms | 0.87 / 1.67 ms |
+
+Both are within target at this size; `0004` removes the sort step, so the cost stays flat as one user's history grows and tied `played_at` values cannot force a sort. `tests/test_playback.py::test_recently_played_query_uses_index_without_sort` guards the plan shape.
 
 Local bring-up: see "Local database bring-up" in `backend/README.md` (`scripts/setup_db.sql` → `alembic upgrade head` → `python -m scripts.seed`).
 
