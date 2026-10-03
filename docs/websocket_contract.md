@@ -79,6 +79,6 @@ BE → RT interface:
 
 | Team | Acknowledged by | Date |
 | --- | --- | --- |
-| RT | | |
-| BE | | |
-| FE | | |
+| RT | Eshwar (saladieshwar) | 2026-10-03 |
+| BE | Eshwar (saladieshwar) | 2026-10-03 |
+| FE | Eshwar (saladieshwar) | 2026-10-03 |

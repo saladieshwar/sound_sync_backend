@@ -1,6 +1,6 @@
-# Acceptance Matrix (QA) — Draft v1.0
+# Acceptance Matrix (QA) — v1.0
 
-Status: **Draft, pending lead review** (Phase 1). Maps test cases to the handbook areas (auth, search, playback, library, room sync, admin) and Section 6 acceptance criteria.
+Status: **Reviewed and approved by leads** (Phase 1, 2026-10-03). Maps test cases to the handbook areas (auth, search, playback, library, room sync, admin) and Section 6 acceptance criteria.
 
 Type: `API` = pytest/HTTP, `UI` = manual or scripted browser, `MD` = multi-device manual run. Phase = handbook phase where the case becomes executable.
 
@@ -122,8 +122,8 @@ Run 2026-10-03. Backend: `pytest` (36 passed). Frontend: `npm test` (32 passed).
 
 | Lead | Team | Approved | Date | Notes |
 | --- | --- | --- | --- | --- |
-| | FE | | | |
-| | BE | | | |
-| | RT | | | |
-| | DATA | | | |
-| | QA | | | |
+| Eshwar (saladieshwar) | FE | Yes | 2026-10-03 | Screens/routes match AUTH, CAT, LIB, PLY, ROOM, ADM UI cases |
+| Eshwar (saladieshwar) | BE | Yes | 2026-10-03 | Error codes match `docs/error_catalogue.md` |
+| Eshwar (saladieshwar) | RT | Yes | 2026-10-03 | ROOM cases match `docs/websocket_contract.md` v1.0 |
+| Eshwar (saladieshwar) | DATA | Yes | 2026-10-03 | Seed fixtures cover CAT/LIB cases |
+| Eshwar (saladieshwar) | QA | Yes | 2026-10-03 | Matrix approved as Phase 1 baseline |
