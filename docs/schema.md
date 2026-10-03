@@ -11,4 +11,8 @@ Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Migration id
 | `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed` |
 | `room_participants` | PK (`room_id`, `user_id`), `joined_at` | row deleted on leave; cascades on room delete |
 
+Repository mapping (BE): `user_repo` → `users`; `song_repo` → `songs`; `library_repo` → `liked_songs`, `recently_played`; `room_repo` → `musical_rooms`, `room_participants`.
+
+Local bring-up: see "Local database bring-up" in `backend/README.md` (`scripts/setup_db.sql` → `alembic upgrade head` → `python -m scripts.seed`).
+
 Admin-leave rule: when the room admin leaves, the room is set to `closed` and all participant rows are removed. When a non-admin controller leaves, control returns to the admin.

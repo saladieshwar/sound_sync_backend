@@ -6,9 +6,9 @@ from app.models import Song, User
 from app.repositories import user_repo
 
 USERS = [
-    {"username": "admin", "email": "admin@soundsync.local", "password": "admin12345", "is_admin": True},
-    {"username": "alice", "email": "alice@soundsync.local", "password": "alice12345", "is_admin": False},
-    {"username": "bob", "email": "bob@soundsync.local", "password": "bob1234567", "is_admin": False},
+    {"username": "admin", "email": "admin@soundsync.dev", "password": "admin12345", "is_admin": True},
+    {"username": "alice", "email": "alice@soundsync.dev", "password": "alice12345", "is_admin": False},
+    {"username": "bob", "email": "bob@soundsync.dev", "password": "bob1234567", "is_admin": False},
 ]
 
 SONGS = [
