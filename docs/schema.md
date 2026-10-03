@@ -1,10 +1,15 @@
 # Schema Note (DATA → BE)
 
-Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Migration identity: `0001`.
+Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0002`.
+
+| Migration | Change |
+| --- | --- |
+| `0001` | Initial schema (all tables below) |
+| `0002` | `users`: `ck_users_email_lowercase` (`email = lower(email)`) and `ck_users_password_hash_bcrypt` (`password_hash ~ '^\$2[aby]\$'`) |
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `users` | `id`, `username`, `email` (unique), `password_hash`, `is_admin`, `created_at` | bcrypt hash only, never plaintext |
+| `users` | `id`, `username`, `email` (unique, lower-case), `password_hash`, `is_admin`, `created_at` | DB rejects duplicate emails, non-lower-case emails, and any `password_hash` that is not a bcrypt hash |
 | `songs` | `id`, `title`, `artist`, `album`, `category`, `duration_seconds`, `audio_url`, `cover_url` | indexes on title/artist/album/category |
 | `liked_songs` | PK (`user_id`, `song_id`), `liked_at` | cascades on user/song delete |
 | `recently_played` | `id`, `user_id`, `song_id`, `played_at` | index (`user_id`, `played_at`) |

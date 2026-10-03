@@ -99,6 +99,25 @@ Type: `API` = pytest/HTTP, `UI` = manual or scripted browser, `MD` = multi-devic
 | P1-04 | FE shell loads; `/login` shows "API online" | Pass | FE |
 | P1-05 | Fresh machine can bring up DB from `backend/README.md` | Pass | DATA |
 
+## Phase 2 results — Authentication & User Foundation
+
+Run 2026-10-03. Backend: `pytest` (36 passed). Frontend: `npm test` (32 passed). Live API run against PostgreSQL 18 on the same day.
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AUTH-01 | Pass | `test_register_returns_user_without_password_fields`; live `POST /auth/register` → 201 |
+| AUTH-02 | Pass | `test_register_duplicate_email_rejected`, `test_register_duplicate_email_is_case_insensitive`, `test_register_concurrent_duplicate_returns_409_not_500`; DB `ix_users_email` + `ck_users_email_lowercase`; live upper-case duplicate → 409 |
+| AUTH-03 | Pass | `test_register_invalid_input_rejected` (bad email, short / 73-char / 74-byte password, blank username); live 100-char password → 422 |
+| AUTH-04 | Pass | `test_login_returns_jwt_and_user`, `test_login_email_is_case_insensitive`; live login → bearer JWT |
+| AUTH-05 | Pass | `test_login_wrong_password_and_unknown_email_look_identical` |
+| AUTH-06 | Pass | `test_me_rejects_missing_or_malformed_token`, `test_me_rejects_expired_token`, `test_me_rejects_token_signed_with_another_secret`, `test_me_rejects_token_without_exp`, `test_me_rejects_token_for_unknown_user` |
+| AUTH-07 | Pass | `test_password_is_stored_as_bcrypt_hash_never_plaintext`, `test_no_auth_response_contains_the_plaintext_password`; DB `ck_users_password_hash_bcrypt`; all stored hashes are `$2b$12$…` (60 chars) |
+| AUTH-08 | Pass | `ProtectedRoute.test.jsx` (anonymous → `/login`, expired token → `/login`), `LoginPage.test.jsx` (returns to the originally requested page) |
+| AUTH-09 | Pass | `RegisterPage.test.jsx` (register → logged in → Home, JWT in `localStorage`) |
+| ADM-02 | Pass | `test_admin_route_forbidden_for_regular_user` |
+| ADM-03 | Pass | `AdminRoute` tests in `ProtectedRoute.test.jsx` |
+| RES-01 | Pass | `_assert_error` shape check in every negative auth test; `test_unknown_route_uses_structured_error`, `test_unhandled_exception_returns_structured_500` |
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |

@@ -5,13 +5,18 @@ import jwt
 
 from app.core.config import settings
 
+_BCRYPT_MAX_BYTES = 72
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    encoded = password.encode("utf-8")
+    if len(encoded) > _BCRYPT_MAX_BYTES:
+        return False
+    return bcrypt.checkpw(encoded, password_hash.encode("utf-8"))
 
 
 def create_access_token(subject: str | int, extra_claims: dict | None = None) -> str:
@@ -27,4 +32,9 @@ def create_access_token(subject: str | int, extra_claims: dict | None = None) ->
 
 def decode_access_token(token: str) -> dict:
     """Raises jwt.PyJWTError on invalid or expired tokens."""
-    return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+        options={"require": ["sub", "exp"]},
+    )
