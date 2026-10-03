@@ -6,12 +6,15 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
+from app.models import Song
+from scripts.seed import SONGS as SEED_SONGS
+from scripts.seed import cover_url_for
 
 _engine = create_engine(os.getenv("TEST_DATABASE_URL", settings.DATABASE_URL))
 
@@ -60,10 +63,34 @@ def make_user(client):
 
 
 @pytest.fixture
-def auth_headers(client, make_user):
-    """Registers and logs in a fresh user; returns Authorization headers."""
-    payload, _ = make_user()
-    token = client.post(
-        "/auth/login", json={"email": payload["email"], "password": payload["password"]}
-    ).json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+def login_headers(client, make_user):
+    """Factory: registers and logs in a fresh user; returns Authorization headers."""
+
+    def _login(**user_fields) -> dict[str, str]:
+        payload, _ = make_user(**user_fields)
+        token = client.post(
+            "/auth/login", json={"email": payload["email"], "password": payload["password"]}
+        ).json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _login
+
+
+@pytest.fixture
+def auth_headers(login_headers):
+    """Authorization headers for one fresh user."""
+    return login_headers()
+
+
+@pytest.fixture
+def catalog(db):
+    """Replaces the songs table (inside the test transaction) with exactly the seed catalog.
+    Returns {title: Song}."""
+    db.execute(delete(Song))
+    songs = {}
+    for i, s in enumerate(SEED_SONGS, start=1):
+        song = Song(**s, audio_url=f"/media/audio/sample-{i}.mp3", cover_url=cover_url_for(s["album"]))
+        db.add(song)
+        songs[s["title"]] = song
+    db.flush()
+    return songs

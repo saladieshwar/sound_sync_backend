@@ -3,6 +3,18 @@ from sqlalchemy.orm import Session
 
 from app.models import Song
 
+_LIKE_ESCAPE = "\\"
+
+
+def _contains_pattern(text: str) -> str:
+    """ILIKE pattern matching `text` literally (user input never acts as a wildcard)."""
+    escaped = (
+        text.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
+        .replace("%", f"{_LIKE_ESCAPE}%")
+        .replace("_", f"{_LIKE_ESCAPE}_")
+    )
+    return f"%{escaped}%"
+
 
 def get_by_id(db: Session, song_id: int) -> Song | None:
     return db.get(Song, song_id)
@@ -13,17 +25,17 @@ def list_songs(db: Session, *, skip: int = 0, limit: int = 50) -> list[Song]:
 
 
 def search(db: Session, query: str, *, limit: int = 50) -> list[Song]:
-    pattern = f"%{query}%"
+    pattern = _contains_pattern(query)
     stmt = (
         select(Song)
         .where(
             or_(
-                Song.title.ilike(pattern),
-                Song.artist.ilike(pattern),
-                Song.album.ilike(pattern),
+                Song.title.ilike(pattern, escape=_LIKE_ESCAPE),
+                Song.artist.ilike(pattern, escape=_LIKE_ESCAPE),
+                Song.album.ilike(pattern, escape=_LIKE_ESCAPE),
             )
         )
-        .order_by(Song.title)
+        .order_by(Song.title, Song.id)
         .limit(limit)
     )
     return list(db.scalars(stmt))
@@ -33,7 +45,7 @@ def list_by_category(db: Session, category: str, *, limit: int = 50) -> list[Son
     stmt = (
         select(Song)
         .where(func.lower(Song.category) == category.lower())
-        .order_by(Song.title)
+        .order_by(Song.title, Song.id)
         .limit(limit)
     )
     return list(db.scalars(stmt))
