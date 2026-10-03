@@ -14,7 +14,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models import Song
 from scripts.seed import SONGS as SEED_SONGS
-from scripts.seed import cover_url_for
+from scripts.seed import audio_url_for, cover_url_for
 
 _engine = create_engine(os.getenv("TEST_DATABASE_URL", settings.DATABASE_URL))
 
@@ -88,8 +88,8 @@ def catalog(db):
     Returns {title: Song}."""
     db.execute(delete(Song))
     songs = {}
-    for i, s in enumerate(SEED_SONGS, start=1):
-        song = Song(**s, audio_url=f"/media/audio/sample-{i}.mp3", cover_url=cover_url_for(s["album"]))
+    for s in SEED_SONGS:
+        song = Song(**s, audio_url=audio_url_for(s["title"]), cover_url=cover_url_for(s["album"]))
         db.add(song)
         songs[s["title"]] = song
     db.flush()

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import LikedSong, RecentlyPlayed
@@ -30,15 +30,19 @@ def remove_like(db: Session, like: LikedSong) -> None:
     db.commit()
 
 
-def list_recently_played(db: Session, user_id: int, *, limit: int = 20) -> list[RecentlyPlayed]:
-    """Play history, most recent first (a song played twice appears twice)."""
-    stmt = (
+def recently_played_query(user_id: int, *, limit: int = 20) -> Select:
+    """Served by ix_recently_played_user_played_at_id (user_id, played_at DESC, id DESC)."""
+    return (
         select(RecentlyPlayed)
         .where(RecentlyPlayed.user_id == user_id)
         .order_by(RecentlyPlayed.played_at.desc(), RecentlyPlayed.id.desc())
         .limit(limit)
     )
-    return list(db.scalars(stmt))
+
+
+def list_recently_played(db: Session, user_id: int, *, limit: int = 20) -> list[RecentlyPlayed]:
+    """Play history, most recent first (a song played twice appears twice)."""
+    return list(db.scalars(recently_played_query(user_id, limit=limit)))
 
 
 def add_recently_played(db: Session, user_id: int, song_id: int) -> RecentlyPlayed:

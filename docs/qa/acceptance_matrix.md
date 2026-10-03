@@ -140,6 +140,26 @@ Run 2026-10-03. Backend: `pytest` (98 passed; 62 new in `tests/test_songs.py` an
 | LIB-07 | Pass (Phase 3 scope) | `HomePage.test.jsx` (like in All Songs appears in Liked Songs; unlike removes it; buttons reflect `aria-pressed`), `LibraryContext.test.jsx` (state loaded from the server on login, so likes persist after reload). Footer player shares the same `likedIds`; re-verified with playback in Phase 4 |
 | ADM-05 | Pass (DB) | `test_deleting_song_removes_it_from_libraries` (likes/plays cascade-deleted); admin UI flow remains Phase 6 |
 
+## Phase 4 results — Home Player & Now Playing
+
+Run 2026-10-03. Backend: `pytest` (108 passed; 10 new in `tests/test_playback.py`). Frontend: `npm test` (103 passed; 39 new in `PlayerContext.test.jsx`, `FooterPlayer.test.jsx`, `NowPlayingPage.test.jsx`). DB at migration `0004`. Scripted UI checks drive the real `PlayerProvider`/`LibraryProvider` with a fake media element (`FakeAudio` in `src/testUtils.jsx`); live checks streamed every seed WAV from the API.
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| PLY-01 | Pass | `plays a song from the media server and logs the play once`, `shows song metadata and wires play events to the API`; live: all 8 seed songs served as `audio/wav`, file length = catalog `duration_seconds` |
+| PLY-02 | Pass | `pauses and resumes without restarting`, queue navigation suite (next, last-song no-op, previous restarts when > 3 s, previous goes back near start, auto-advance on `ended`, stop after last), `play/pause, next and previous buttons drive the player`, `disables Next on the last song in the queue` |
+| PLY-03 | Pass | `seeks to the exact requested position` (42.5 s → 42.5 s), `clamps seeks…`, `seeks accurately on release, and ignores live progress while dragging` (100.5 s, within ±0.5 s), `commits keyboard seeks on key release`; BE `test_audio_supports_range_requests_for_seeking`; live range request → 206 |
+| PLY-04 | Pass | `persists volume across reloads`, `persists mute across reloads`, `sanitizes a stored volume…`, `volume and mute apply immediately and persist after reload` |
+| PLY-05 | Pass | `likes and unlikes mid-playback without interrupting the song` (footer), `likes the current song without interrupting playback` (Now Playing), `volume changes do not interrupt playback` |
+| PLY-06 | Pass | FE: one `logPlay` per song start, none on pause/resume or restart; BE `test_each_play_event_is_logged_for_the_right_user`, LIB-05 ordering tests; live `POST /users/me/recently-played/{id}` → 201 and listed newest first |
+| PLY-07 | Pass | `NowPlayingPage.test.jsx` (metadata, play state, current song marked in Up Next, like, play from queue) |
+| LIB-07 | Pass | Footer like button shares `likedIds` with song rows and Now Playing; covered above (Phase 3 + Phase 4) |
+| RES-01 | Pass | `test_missing_audio_is_structured_404`; player shows "Can't play this song" for a broken file and retries on Play |
+
+Data — recently-played performance target (p95 ≤ 10 ms, index-only plan): met; see "Recently-played performance" in `docs/schema.md` and `test_recently_played_query_uses_index_without_sort`.
+
+Manual browser check (run once per release): log in, play a song from Home, then confirm audio is heard, seek lands where released, volume/mute survive a page reload, liking mid-song does not interrupt audio, and the song appears first in Recently Played.
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |

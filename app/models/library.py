@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -33,7 +33,14 @@ class LikedSong(Base):
 class RecentlyPlayed(Base):
     __tablename__ = "recently_played"
     __table_args__ = (
-        Index("ix_recently_played_user_played_at", "user_id", "played_at"),
+        # Matches library_repo.list_recently_played (WHERE user_id ORDER BY played_at DESC, id DESC
+        # LIMIT n) so the newest-first page is read straight off the index with no sort.
+        Index(
+            "ix_recently_played_user_played_at_id",
+            "user_id",
+            text("played_at DESC"),
+            text("id DESC"),
+        ),
         Index("ix_recently_played_song_id", "song_id"),
     )
 
