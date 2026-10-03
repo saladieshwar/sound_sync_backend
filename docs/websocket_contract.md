@@ -1,6 +1,6 @@
 # WebSocket Event Contract (RT → FE/BE)
 
-Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge.
+Status: **Frozen v1.0** (Phase 1). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge.
 
 ## Connection
 
@@ -41,7 +41,7 @@ Server → client:
 | `room_closed` | server → client | `{}` (admin left; socket is then closed) |
 | `error` | server → sender | `code`: `INVALID_MESSAGE`, `INVALID_PAYLOAD`, `EVENT_NOT_ALLOWED`, `NOT_ROOM_CONTROLLER` |
 
-`room_state`, `room_closed`, and `error` are additions to the handbook's base list of seven events.
+`room_state`, `room_closed`, and `error` extend the handbook's base list of seven events and are part of v1.0.
 
 ## Rules
 
@@ -50,3 +50,35 @@ Server → client:
 - Accepted playback events are persisted through BE (`room_service.update_playback_state`) before broadcast.
 - Control transfer happens over REST (`POST /rooms/{id}/transfer-access`); RT then broadcasts `access_transfer`.
 - Socket disconnect does not remove room membership; only REST leave does.
+
+## Room data BE exposes to RT
+
+Shape: `RoomOut` in `app/schemas/room.py`, backed by `musical_rooms` + `room_participants`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string (8 chars, upper-case) | Room ID used in REST paths, the WS path, and the join link |
+| `name` | string | |
+| `admin_user_id` | int | Room creator; leaving closes the room |
+| `controller_user_id` | int / null | Only this user's playback events are broadcast |
+| `current_song_id` | int / null | |
+| `is_playing` | bool | |
+| `position_seconds` | float | Playback position at `state_updated_at` |
+| `state_updated_at` | datetime (UTC) | Used with `server_ts` for drift reconciliation |
+| `status` | `active` / `closed` | WS connections are refused when `closed` |
+| `participants[]` | `{ user: { id, username }, joined_at }` | A row exists only after REST join |
+| `join_link` | string | `{FRONTEND_BASE_URL}/room/{id}` |
+
+BE → RT interface:
+
+- RT reads room state via `room_repo.get_by_id` and authorizes sockets via `room_service.get_active_room_or_404` + `room_repo.get_participant`.
+- RT writes playback state only through `room_service.update_playback_state`; it never writes tables directly.
+- BE calls RT through `app/realtime/sync_facade.py` (`connect`, `disconnect`, `broadcast`, `validate_controller`, `close_room`) after REST transfer-access and leave.
+
+## Sign-off
+
+| Team | Acknowledged by | Date |
+| --- | --- | --- |
+| RT | | |
+| BE | | |
+| FE | | |
