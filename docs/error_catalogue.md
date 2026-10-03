@@ -69,3 +69,20 @@ Authorization: Bearer <JWT>
 - `401 INVALID_TOKEN`
 
 In Swagger UI (`/docs`): call `/auth/login`, copy `access_token`, click **Authorize**, paste it, then call protected routes.
+
+## Catalog & library examples (Phase 3)
+
+Catalog reads (`/songs/*`) are public. Library routes (`/users/me/*`) require `Authorization: Bearer <JWT>`; without a valid token → `401 INVALID_TOKEN`.
+
+| Request | Success | Errors |
+| --- | --- | --- |
+| `GET /songs?skip=&limit=` | `200` song list (`skip` ≥ 0, `limit` 1–200) | `422 VALIDATION_ERROR` |
+| `GET /songs/search?q=rain` | `200` matching songs; no match → `[]` | `422 VALIDATION_ERROR` when `q` is missing, blank, or > 100 chars |
+| `GET /songs/category/{name}` | `200` songs in that category; unknown → `[]` | — |
+| `GET /songs/albums`, `GET /songs/album/{name}` | `200` | — |
+| `GET /songs/{song_id}` | `200` song | `404 SONG_NOT_FOUND`; non-integer id → `422 VALIDATION_ERROR` |
+| `POST /users/me/liked-songs/{song_id}` | `201` `{ song, liked_at }`; liking again returns the same like | `404 SONG_NOT_FOUND`, `401 INVALID_TOKEN` |
+| `DELETE /users/me/liked-songs/{song_id}` | `204`; also `204` if the song was not liked | `401 INVALID_TOKEN` |
+| `GET /users/me/liked-songs` | `200` newest first | `401 INVALID_TOKEN` |
+| `POST /users/me/recently-played/{song_id}` | `201` `{ song, played_at }` | `404 SONG_NOT_FOUND`, `401 INVALID_TOKEN` |
+| `GET /users/me/recently-played?limit=` | `200` play history, most recent first (`limit` 1–100, default 20) | `422 VALIDATION_ERROR`, `401 INVALID_TOKEN` |

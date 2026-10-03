@@ -118,6 +118,28 @@ Run 2026-10-03. Backend: `pytest` (36 passed). Frontend: `npm test` (32 passed).
 | ADM-03 | Pass | `AdminRoute` tests in `ProtectedRoute.test.jsx` |
 | RES-01 | Pass | `_assert_error` shape check in every negative auth test; `test_unknown_route_uses_structured_error`, `test_unhandled_exception_returns_structured_500` |
 
+## Phase 3 results — Music Catalog & Library
+
+Run 2026-10-03. Backend: `pytest` (98 passed; 62 new in `tests/test_songs.py` and `tests/test_library.py`). Frontend: `npm test` (64 passed; 32 new). DB at migration `0003`; `alembic check` reports no drift. Catalog tests run against exactly the seed catalog (`catalog` fixture). Live API run against PostgreSQL 18 on the same day.
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| CAT-01 | Pass | `test_cat01_search_matches` (partial title, upper-case, artist, album, padded query, title ordering), `test_search_treats_wildcards_literally`; live `q=rain` → Grey Rain |
+| CAT-02 | Pass | `test_cat02_search_no_match_returns_empty_list` (incl. `%`, `_`, `\`); live `q=zzz` and `q=%` → `[]` |
+| CAT-03 | Pass | `test_cat03_search_invalid_query_is_422` (missing, empty, blank, > 100 chars); live blank `q` → 422 |
+| CAT-04 | Pass | `test_cat04_category_filter` (all 4 seeded categories + case-insensitive), `test_unknown_category_returns_empty_list`; live `/songs/category/sad` → Grey Rain, Letters Unsent |
+| CAT-05 | Pass | `test_cat05_list_albums` (4 albums × 2 songs, cover URLs), `test_cat05_album_songs`; live `/songs/albums`; cover served at `/media/covers/calm-skies.svg` |
+| CAT-06 | Pass | `test_cat06_unknown_song_is_404`; live `/songs/999999` → 404 `SONG_NOT_FOUND` |
+| CAT-07 | Pass | `HomePage.test.jsx` (categories/albums/all songs render API data, loading + error/retry, category and album cards navigate), `SearchPage.test.jsx` (navbar search → results, no-match, blank query ignored), `BrowsePage.test.jsx` |
+| LIB-01 | Pass | `test_lib01_like_then_list_newest_first`; live like → listed → cleaned up |
+| LIB-02 | Pass | `test_lib02_like_twice_is_idempotent`; concurrent duplicate like handled in `library_service.like_song` |
+| LIB-03 | Pass | `test_lib03_unlike_removes_song`, `test_unlike_song_that_is_not_liked_is_noop`, `test_like_unlike_like_again` |
+| LIB-04 | Pass | `test_lib04_like_unknown_song_is_404`, `test_log_play_unknown_song_is_404` |
+| LIB-05 | Pass | `test_lib05_recently_played_most_recent_first` (A, B, A → A, B, A), `test_recently_played_limit`; Home shows each song once (`LibraryContext.test.jsx`, `HomePage.test.jsx`) |
+| LIB-06 | Pass | `test_lib06_library_is_isolated_per_user`; all library routes reject missing/invalid JWT (`test_library_requires_valid_jwt`) |
+| LIB-07 | Pass (Phase 3 scope) | `HomePage.test.jsx` (like in All Songs appears in Liked Songs; unlike removes it; buttons reflect `aria-pressed`), `LibraryContext.test.jsx` (state loaded from the server on login, so likes persist after reload). Footer player shares the same `likedIds`; re-verified with playback in Phase 4 |
+| ADM-05 | Pass (DB) | `test_deleting_song_removes_it_from_libraries` (likes/plays cascade-deleted); admin UI flow remains Phase 6 |
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |

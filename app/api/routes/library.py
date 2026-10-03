@@ -2,10 +2,17 @@ from fastapi import APIRouter, Query, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.repositories import library_repo
+from app.schemas.common import ErrorResponse
 from app.schemas.library import LikedSongOut, RecentlyPlayedOut
 from app.services import library_service
 
-router = APIRouter(prefix="/users/me", tags=["library"])
+router = APIRouter(
+    prefix="/users/me",
+    tags=["library"],
+    responses={401: {"model": ErrorResponse}},
+)
+
+_song_not_found = {404: {"model": ErrorResponse}}
 
 
 @router.get("/liked-songs", response_model=list[LikedSongOut])
@@ -14,7 +21,10 @@ def list_liked_songs(user: CurrentUser, db: DbSession):
 
 
 @router.post(
-    "/liked-songs/{song_id}", response_model=LikedSongOut, status_code=status.HTTP_201_CREATED
+    "/liked-songs/{song_id}",
+    response_model=LikedSongOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=_song_not_found,
 )
 def like_song(song_id: int, user: CurrentUser, db: DbSession):
     return library_service.like_song(db, user.id, song_id)
@@ -26,7 +36,7 @@ def unlike_song(song_id: int, user: CurrentUser, db: DbSession):
 
 
 @router.get("/recently-played", response_model=list[RecentlyPlayedOut])
-def get_recently_played(user: CurrentUser, db: DbSession, limit: int = Query(20, le=100)):
+def get_recently_played(user: CurrentUser, db: DbSession, limit: int = Query(20, ge=1, le=100)):
     return library_repo.list_recently_played(db, user.id, limit=limit)
 
 
@@ -34,6 +44,7 @@ def get_recently_played(user: CurrentUser, db: DbSession, limit: int = Query(20,
     "/recently-played/{song_id}",
     response_model=RecentlyPlayedOut,
     status_code=status.HTTP_201_CREATED,
+    responses=_song_not_found,
 )
 def log_play(song_id: int, user: CurrentUser, db: DbSession):
     return library_service.log_play(db, user.id, song_id)

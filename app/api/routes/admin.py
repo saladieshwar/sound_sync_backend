@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, Form, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
 from app.api.deps import AdminUser, DbSession
 from app.repositories import room_repo, song_repo, user_repo
@@ -40,7 +40,12 @@ def delete_song(song_id: int, _: AdminUser, db: DbSession):
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(_: AdminUser, db: DbSession, skip: int = 0, limit: int = 100):
+def list_users(
+    _: AdminUser,
+    db: DbSession,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+):
     return user_repo.list_all(db, skip=skip, limit=limit)
 
 
