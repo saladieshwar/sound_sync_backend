@@ -60,6 +60,7 @@ FastAPI service covering three handbook stacks:
 | OpenAPI (REST) | FE, QA | Live at `/openapi.json`; snapshot in `docs/openapi.json` |
 | WebSocket events | FE, BE, QA | `docs/websocket_contract.md` |
 | Schema | BE, QA | `docs/schema.md`, `alembic/versions/` |
+| Error catalogue | FE, QA | `docs/error_catalogue.md` |
 | Acceptance matrix | All | `docs/qa/acceptance_matrix.md` |
 
 Regenerate the OpenAPI snapshot after changing endpoints:
@@ -73,3 +74,5 @@ python -m scripts.export_openapi
 ```powershell
 pytest
 ```
+
+Tests run against PostgreSQL (`TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`). Each test runs inside a transaction that is rolled back, so the database is left unchanged. `tests/test_auth.py` covers the Phase 2 auth cases in `docs/qa/acceptance_matrix.md`.

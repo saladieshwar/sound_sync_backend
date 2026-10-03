@@ -1,6 +1,10 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PLACEHOLDER_SECRETS = {"change-me", "change-me-to-a-long-random-string"}
+_MIN_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -20,6 +24,19 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = "./media"
     MEDIA_URL_PREFIX: str = "/media"
+
+    @model_validator(mode="after")
+    def _require_strong_secret_outside_dev(self) -> "Settings":
+        weak = (
+            self.JWT_SECRET_KEY in _PLACEHOLDER_SECRETS
+            or len(self.JWT_SECRET_KEY) < _MIN_SECRET_LENGTH
+        )
+        if self.ENVIRONMENT != "development" and weak:
+            raise ValueError(
+                f"JWT_SECRET_KEY must be a non-placeholder value of at least "
+                f"{_MIN_SECRET_LENGTH} characters when ENVIRONMENT={self.ENVIRONMENT}"
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

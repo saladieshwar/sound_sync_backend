@@ -1411,6 +1411,8 @@
           },
           "password": {
             "type": "string",
+            "maxLength": 72,
+            "minLength": 1,
             "title": "Password"
           }
         },
@@ -1419,7 +1421,13 @@
           "email",
           "password"
         ],
-        "title": "LoginRequest"
+        "title": "LoginRequest",
+        "examples": [
+          {
+            "email": "admin@soundsync.dev",
+            "password": "admin12345"
+          }
+        ]
       },
       "MessageResponse": {
         "properties": {
@@ -1485,7 +1493,7 @@
           },
           "password": {
             "type": "string",
-            "maxLength": 128,
+            "maxLength": 72,
             "minLength": 8,
             "title": "Password"
           }
@@ -1496,7 +1504,14 @@
           "email",
           "password"
         ],
-        "title": "RegisterRequest"
+        "title": "RegisterRequest",
+        "examples": [
+          {
+            "email": "alice@soundsync.dev",
+            "password": "alice12345",
+            "username": "alice"
+          }
+        ]
       },
       "RoomCreateRequest": {
         "properties": {
