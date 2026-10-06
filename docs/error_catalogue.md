@@ -21,7 +21,8 @@ Source of truth: `app/core/errors.py`. Every error response has this shape:
 | `ROOM_NOT_FOUND` | 404 | Unknown room id |
 | `ROOM_CLOSED` | 410 | Room exists but is closed |
 | `NOT_ROOM_PARTICIPANT` | 403 | Room action by a user who has not joined |
-| `NOT_ROOM_CONTROLLER` | 403 | Transfer-access by someone who is neither admin nor controller |
+| `NOT_ROOM_CONTROLLER` | 403 | Transfer-access by someone who is neither admin nor controller; over WebSocket, a playback event from a non-controller |
+| `NO_CURRENT_SONG` | 409 | Over WebSocket: `play` / `pause` / `seek` before the room has a song |
 | `NOT_FOUND` | 404 | Unknown route |
 | `METHOD_NOT_ALLOWED` | 405 | Wrong HTTP method for a route |
 | `HTTP_ERROR` | varies | Any other framework-level HTTP error |
@@ -86,3 +87,17 @@ Catalog reads (`/songs/*`) are public. Library routes (`/users/me/*`) require `A
 | `GET /users/me/liked-songs` | `200` newest first | `401 INVALID_TOKEN` |
 | `POST /users/me/recently-played/{song_id}` | `201` `{ song, played_at }` | `404 SONG_NOT_FOUND`, `401 INVALID_TOKEN` |
 | `GET /users/me/recently-played?limit=` | `200` play history, most recent first (`limit` 1–100, default 20) | `422 VALIDATION_ERROR`, `401 INVALID_TOKEN` |
+
+## Musical Room examples (Phase 5)
+
+All room routes require `Authorization: Bearer <JWT>`; without a valid token → `401 INVALID_TOKEN`. Room IDs are case-insensitive in every path.
+
+| Request | Success | Errors |
+| --- | --- | --- |
+| `POST /rooms` `{ "name": "Friday night" }` | `201` `RoomOut`; 8-char upper-case `id`, `join_link`, creator is admin + controller + first participant | `422 VALIDATION_ERROR` (name blank or > 100 chars) |
+| `GET /rooms/{room_id}` | `200` `RoomOut` | `403 NOT_ROOM_PARTICIPANT`, `404 ROOM_NOT_FOUND`, `410 ROOM_CLOSED` |
+| `POST /rooms/{room_id}/join` | `200` `RoomOut`; joining again is a no-op | `404 ROOM_NOT_FOUND`, `410 ROOM_CLOSED` |
+| `POST /rooms/{room_id}/leave` | `200` `{ "message": "Left room" }` (participant row deleted; control returns to admin if the leaver was controller) or `{ "message": "Room closed" }` (admin left: room closed, all participant rows deleted) | `403 NOT_ROOM_PARTICIPANT`, `404`, `410` |
+| `POST /rooms/{room_id}/transfer-access` `{ "target_user_id": 7 }` | `200` `RoomOut` with the new `controller_user_id` | `403 NOT_ROOM_CONTROLLER` (caller is neither admin nor controller), `403 NOT_ROOM_PARTICIPANT` (target has not joined), `404`, `410` |
+
+WebSocket errors are sent as `error` events, not HTTP responses; see `docs/websocket_contract.md`.

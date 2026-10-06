@@ -37,6 +37,7 @@ def leave_room(room_id: str, user: CurrentUser, db: DbSession, tasks: Background
     if closed:
         tasks.add_task(sync_facade.close_room, room.id)
         return MessageResponse(message="Room closed")
+    tasks.add_task(sync_facade.remove_user, room.id, user.id)
     tasks.add_task(
         sync_facade.broadcast,
         room.id,

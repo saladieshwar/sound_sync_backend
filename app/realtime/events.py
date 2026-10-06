@@ -35,8 +35,20 @@ class ClientMessage(BaseModel):
 
 
 class PlaybackPayload(BaseModel):
-    position_seconds: float = Field(ge=0)
+    position_seconds: float = Field(ge=0, le=86_400)
     song_id: int | None = None
+
+
+# Codes sent in `error` payloads (server -> sender only).
+WS_ERROR_CODES = (
+    "INVALID_MESSAGE",  # not JSON / unknown type / missing fields
+    "INVALID_PAYLOAD",  # bad position, or song_change without song_id
+    "EVENT_NOT_ALLOWED",  # server-originated event type sent by a client
+    "NOT_ROOM_CONTROLLER",  # sender is not the current controller
+    "NO_CURRENT_SONG",  # play/pause/seek before any song_change
+    "SONG_NOT_FOUND",  # song_change to an unknown song
+    "ROOM_CLOSED",  # room closed meanwhile; socket is then closed
+)
 
 
 class ServerMessage(BaseModel):
