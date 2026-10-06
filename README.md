@@ -84,3 +84,20 @@ Recently-played query benchmark (rolled back, leaves no data):
 ```powershell
 python -m scripts.benchmark_recently_played 1000 200
 ```
+
+Phase 5 (Musical Room): `tests/test_rooms.py` covers the room REST API and room tables inside the rolled-back transaction. `tests/test_room_sync.py` starts a real uvicorn server on a free port in a background thread and drives 2–3 WebSocket clients (play/pause/seek/song change, controller validation, control transfer both ways, leave, admin leave, drop/reconnect, malformed messages). Because the WebSocket route opens its own DB sessions, these tests commit data; every user and song they create is deleted when the module finishes.
+
+Live multi-client check against a running API (prints delivery latency; cleans up its users):
+
+```powershell
+python -m scripts.room_sync_check http://127.0.0.1:8000 20
+```
+
+## Multi-device room testing (same Wi-Fi)
+
+1. Find this machine's LAN IP (`ipconfig` → IPv4 Address, e.g. `192.168.1.20`).
+2. In `.env`, set `FRONTEND_BASE_URL=http://192.168.1.20:5173` so join links open on other devices. In development, CORS already accepts private-LAN origins on port 5173 (`CORS_ORIGIN_REGEX` overrides this).
+3. Start the API on all interfaces: `fastapi dev app/main.py --host 0.0.0.0` (or `uvicorn app.main:app --host 0.0.0.0 --port 8000`).
+4. Start the frontend on all interfaces: `npm run dev -- --host` (in `frontend/`). With no `VITE_*` URLs set, the app calls the API on the same host it was opened from.
+5. Allow Python and Node through Windows Defender Firewall for private networks if prompted.
+6. Device A opens `http://192.168.1.20:5173`, creates a room, and shares the join link; device B opens the link (or types the Room ID) and taps **Join Room**. If a device shows **Tap to hear the room**, tap it once — browsers block audio until the user interacts with the page.

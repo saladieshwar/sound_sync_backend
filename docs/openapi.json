@@ -1604,7 +1604,12 @@
         "required": [
           "name"
         ],
-        "title": "RoomCreateRequest"
+        "title": "RoomCreateRequest",
+        "examples": [
+          {
+            "name": "Friday night"
+          }
+        ]
       },
       "RoomOut": {
         "properties": {

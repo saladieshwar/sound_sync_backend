@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from app.models import MusicalRoom, RoomParticipant, RoomStatus
 
 
-def get_by_id(db: Session, room_id: str) -> MusicalRoom | None:
-    return db.get(MusicalRoom, room_id)
+def get_by_id(db: Session, room_id: str, *, for_update: bool = False) -> MusicalRoom | None:
+    """`for_update` locks the row so controller checks and state writes are atomic."""
+    return db.get(MusicalRoom, room_id, with_for_update=for_update, populate_existing=for_update)
 
 
 def list_active(db: Session) -> list[MusicalRoom]:
@@ -41,11 +42,6 @@ def add_participant(db: Session, room_id: str, user_id: int) -> RoomParticipant:
     db.commit()
     db.refresh(participant)
     return participant
-
-
-def remove_participant(db: Session, participant: RoomParticipant) -> None:
-    db.delete(participant)
-    db.commit()
 
 
 def save(db: Session, room: MusicalRoom) -> MusicalRoom:

@@ -1,13 +1,16 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from app.models.room import RoomStatus
 from app.schemas.user import UserPublic
 
 
 class RoomCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    model_config = ConfigDict(json_schema_extra={"examples": [{"name": "Friday night"}]})
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class TransferAccessRequest(BaseModel):

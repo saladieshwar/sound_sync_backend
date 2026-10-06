@@ -160,12 +160,36 @@ Data — recently-played performance target (p95 ≤ 10 ms, index-only plan): me
 
 Manual browser check (run once per release): log in, play a song from Home, then confirm audio is heard, seek lands where released, volume/mute survive a page reload, liking mid-song does not interrupt audio, and the song appears first in Recently Played.
 
+## Phase 5 results — Musical Room
+
+Run 2026-10-03. Backend: `pytest` (159 passed; 51 new — 29 in `tests/test_rooms.py`, 22 in `tests/test_room_sync.py`). Frontend: `npm test` (161 passed; 58 new in `RoomPage`, `RoomLandingPage`, `ParticipantList`, `LeaveRoomButton`, `useRoomSocket`, `events`, `rooms` utils, and room-sync cases in `PlayerContext`). DB at migration `0004` (room tables from `0001`; no new migration needed). `MD` cases are evidenced by real multi-client WebSocket runs: `tests/test_room_sync.py` (live uvicorn server, 2–3 `websockets` clients) and `python -m scripts.room_sync_check` against a running API.
+
+Drift tolerance agreed for ROOM-05: **0.5 s** (`websocket_contract.md` v1.1). Live harness, 3 clients × 80 events: delivery latency **p50 9.8 ms, p95 14.5 ms, max 26 ms**.
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| ROOM-01 | Pass | `test_create_room_makes_creator_admin_controller_and_participant` (8-char upper-case ID, trimmed name), `test_create_room_returns_shareable_join_link`, `test_room_ids_are_unique`, `test_create_room_rejects_invalid_name`; FE `creates a room with a trimmed name and opens it` |
+| ROOM-02 | Pass | Room ID: `test_join_by_room_id_adds_participant`, `test_join_is_idempotent`; link (lower-case ID): `test_join_is_case_insensitive_like_a_typed_room_id`, WS `test_join_link_lowercase_room_id_connects`; FE `joins by a typed Room ID in any letter case`, `joins by a pasted join link`, `updates participants as people join and leave`; harness "joined by Room ID" / "joined via join link" |
+| ROOM-03 | Pass | FE `opening a join link shows a Join Room prompt and does not auto-join` (no REST join and no socket until **Join Room** is clicked) |
+| ROOM-04 | Pass | `test_socket_rejected_without_rest_join`, `test_socket_rejected_with_bad_token`, `test_socket_rejected_for_closed_room` (all close `1008`; socket accepted first so browsers read the code); FE `does not retry when the server closes with 1008` |
+| ROOM-05 | Pass | `test_play_pause_seek_song_change_sync_across_three_clients` (every client gets the persisted state; each delivery < 0.5 s), `test_room_state_reflects_persisted_playback`; harness p95 14.5 ms; FE `cannot drive playback and follows play, seek and pause broadcasts`, `joins a playing room at the current position` (±0.5 s), `ignores drift within the 0.5 s tolerance and corrects larger drift` |
+| ROOM-06 | Pass | `test_non_controller_events_are_rejected_and_not_broadcast` (crafted `play` and `song_change` → `NOT_ROOM_CONTROLLER`, other clients receive nothing), `test_playback_event_requires_controller`; FE listener controls disabled |
+| ROOM-07 | Pass | `test_transfer_control_both_directions` (WS: `access_transfer` on all clients; only the new controller can drive playback, old controller rejected), REST `test_transfer_access_both_directions`, `test_admin_can_take_back_control_from_controller`, `test_new_controller_can_drive_playback_after_transfer`; FE `gives control to a participant`, `takes over the controls when control is transferred to them`; harness admin → bob → admin |
+| ROOM-08 | Pass | `test_only_admin_or_controller_can_transfer` (403 `NOT_ROOM_CONTROLLER`), `test_transfer_to_non_participant_is_403` |
+| ROOM-09 | Pass | `test_leave_removes_participant_row`, `test_controller_leaving_returns_control_to_admin`, `test_leave_when_not_participant_is_403`; WS `test_participant_leave_closes_their_socket_and_notifies_room` (`user_left` `reason: left` with new controller; leaver's socket closed `1000`); FE `leaving calls the API, stops room audio and returns to the landing page` |
+| ROOM-10 | Pass | `test_admin_leaving_closes_room_and_clears_participants`, WS `test_admin_leave_mid_session_closes_room_for_everyone` (3 clients get `room_closed`, sockets close `1000`, room → 410); FE `returns everyone to the landing page when the admin closes the room`; harness "Admin leaves mid-session" |
+| ROOM-11 | Pass | WS `test_network_drop_then_reconnect_resyncs` (drop → `user_left` `disconnected`; reconnect → `room_state` with the position/pause state set while offline; next broadcast received); FE `reconnects after a network drop and resyncs from room_state`, `useRoomSocket` `reconnects after a network drop`; harness "Network drop and reconnect" |
+| ROOM-12 | Pass | `test_bad_messages_get_error_and_socket_stays_up` (non-JSON, missing/unknown type, server-only type, bad position, `song_change` without song, `NO_CURRENT_SONG`, `SONG_NOT_FOUND` — socket keeps working after each), `test_binary_frame_gets_error_and_socket_stays_up`; FE ignores malformed frames, shows friendly error text |
+| RES-03 | Pass | `test_network_drop_then_reconnect_resyncs` (other clients get `user_left` `disconnected`; room keeps playing), `test_second_tab_does_not_duplicate_presence` |
+
+Manual two-device check (run once per release; setup in `backend/README.md` → "Multi-device room testing"): on device A create a room and copy the join link; on device B open the link and tap **Join Room** (also try typing the Room ID). Pick a song on A and confirm B hears it in step; pause, seek, and change song on A and confirm B follows within about half a second. Give control to B, drive playback from B, then give it back. Turn B's Wi-Fi off for ~10 s and on again: B shows **Reconnecting…**, then **Live**, and jumps to the room position. Leave on B (red **Leave Room** button) — B returns to the landing page and disappears from A's list. Finally leave on A — B is sent to the landing page with "The room was closed by its admin."
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |
 | --- | --- | --- | --- | --- |
 | Eshwar (saladieshwar) | FE | Yes | 2026-10-03 | Screens/routes match AUTH, CAT, LIB, PLY, ROOM, ADM UI cases |
 | Eshwar (saladieshwar) | BE | Yes | 2026-10-03 | Error codes match `docs/error_catalogue.md` |
-| Eshwar (saladieshwar) | RT | Yes | 2026-10-03 | ROOM cases match `docs/websocket_contract.md` v1.0 |
+| Eshwar (saladieshwar) | RT | Yes | 2026-10-03 | ROOM cases match `docs/websocket_contract.md` v1.1 |
 | Eshwar (saladieshwar) | DATA | Yes | 2026-10-03 | Seed fixtures cover CAT/LIB cases |
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-03 | Matrix approved as Phase 1 baseline |

@@ -15,8 +15,8 @@ Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migr
 | `songs` | `id`, `title`, `artist`, `album`, `category`, `duration_seconds`, `audio_url`, `cover_url` | B-tree indexes on title/artist/album/category; trigram indexes for search; `lower(category)` index |
 | `liked_songs` | PK (`user_id`, `song_id`), `liked_at` | index (`user_id`, `liked_at`) for "newest first"; index `song_id`; cascades on user/song delete |
 | `recently_played` | `id`, `user_id`, `song_id`, `played_at` | full play history (a replay adds a new row); index (`user_id`, `played_at DESC`, `id DESC`); index `song_id`; cascades on user/song delete |
-| `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed` |
-| `room_participants` | PK (`room_id`, `user_id`), `joined_at` | row deleted on leave; cascades on room delete |
+| `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed`; deleting the admin user deletes the room (CASCADE); deleting the controller or current song sets them to NULL |
+| `room_participants` | PK (`room_id`, `user_id`), `joined_at` | row deleted on leave; cascades on room delete and user delete; index `user_id` |
 
 Repository mapping (BE): `user_repo` → `users`; `song_repo` → `songs`; `library_repo` → `liked_songs`, `recently_played`; `room_repo` → `musical_rooms`, `room_participants`.
 
@@ -47,4 +47,12 @@ Both are within target at this size; `0004` removes the sort step, so the cost s
 
 Local bring-up: see "Local database bring-up" in `backend/README.md` (`scripts/setup_db.sql` → `alembic upgrade head` → `python -m scripts.seed`).
 
-Admin-leave rule: when the room admin leaves, the room is set to `closed` and all participant rows are removed. When a non-admin controller leaves, control returns to the admin.
+## Musical Room rules (Phase 5)
+
+Admin-leave rule: when the room admin leaves, the room is set to `closed`, `is_playing` is cleared, and all participant rows are removed. When a non-admin controller leaves, control returns to the admin. Either way the leaver's `room_participants` row is deleted in the same transaction as the room update.
+
+Concurrency: leave, transfer-access, and every playback event lock the `musical_rooms` row (`SELECT … FOR UPDATE`), so a controller check and the state write it guards are atomic — a transfer that commits first always wins over a playback event from the old controller.
+
+Playback state written by RT (`room_service.apply_playback_event`): `song_change` sets `current_song_id` and `is_playing = true`; `play` / `pause` set `is_playing`; `seek` keeps it. `position_seconds` is clamped to `[0, duration_seconds]` and `state_updated_at` is set to the write time. Migrations: the room tables come from `0001`; Phase 5 needs no new migration (head stays `0004`).
+
+Evidence: `tests/test_rooms.py` (`test_leave_removes_participant_row`, `test_admin_leaving_closes_room_and_clears_participants`, `test_deleting_room_cascades_to_participants`, `test_controller_leaving_returns_control_to_admin`).
