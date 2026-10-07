@@ -17,6 +17,8 @@ class EventType(str, enum.Enum):
     PAUSE = "pause"
     SEEK = "seek"
     SONG_CHANGE = "song_change"
+    # Clock sync: any participant; answered only to the sender
+    TIME_SYNC = "time_sync"
     # Control + presence events: server-originated only
     ACCESS_TRANSFER = "access_transfer"
     USER_JOINED = "user_joined"
@@ -37,6 +39,12 @@ class ClientMessage(BaseModel):
 class PlaybackPayload(BaseModel):
     position_seconds: float = Field(ge=0, le=86_400)
     song_id: int | None = None
+
+
+class TimeSyncPayload(BaseModel):
+    """Client clock reading (epoch ms) echoed back with the server's `server_ts`."""
+
+    client_ts: float
 
 
 # Codes sent in `error` payloads (server -> sender only).
