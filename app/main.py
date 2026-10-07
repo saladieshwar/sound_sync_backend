@@ -5,11 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.core import log_redaction
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 
 
 def create_app() -> FastAPI:
+    log_redaction.install()
     app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 
     app.add_middleware(

@@ -8,12 +8,12 @@ Status: **Frozen v1.2** (Phase 5). Source of truth: `app/realtime/events.py`. Ch
 | --- | --- | --- |
 | v1.0 | 2026-10-03 | Phase 1 baseline |
 | v1.1 | 2026-10-03 | Phase 5 delivery. Additive only: playback broadcasts carry the authoritative `is_playing`; `room_state` adds `online_user_ids`; new `error` codes `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED`; close codes documented; presence events are per user (second tab does not re-announce); rejected sockets are accepted then closed with `1008` so browsers can read the code |
-| v1.2 | 2026-10-07 | Additive only: `time_sync` event (client clock-offset estimation, answered to the sender only); clients follow the room timeline on the server clock with continuous drift correction instead of a 0.5 s seek-only tolerance |
+| v1.2 | 2026-10-07 | Additive only: `time_sync` event (client clock-offset estimation, answered to the sender only); clients follow the room timeline on the server clock with continuous drift correction instead of a 0.5 s seek-only tolerance. Phase 6: no message changes; measured sync under realistic networks and the agreed tolerance are in `docs/sync_tuning.md` |
 
 ## Connection
 
 1. Client joins via REST: `POST /rooms/{room_id}/join` (Bearer JWT). Room IDs are case-insensitive.
-2. Client connects: `ws://<host>/rooms/{room_id}/ws?token=<JWT>`.
+2. Client connects: `ws://<host>/rooms/{room_id}/ws?token=<JWT>`. (Browsers cannot set headers on a WebSocket, hence the query string; the server redacts `token=` from its logs, see `docs/error_catalogue.md` → "Logging".)
 3. Server closes with code `1008` if the token is invalid, the room is closed or unknown, or the user has not joined via REST.
 4. On accept, the server sends `room_state` to the new socket and, if this is the user's first socket in the room, broadcasts `user_joined` to everyone else.
 

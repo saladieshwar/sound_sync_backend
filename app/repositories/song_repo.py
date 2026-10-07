@@ -1,13 +1,14 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Song
 
 _LIKE_ESCAPE = "\\"
+_FIELD_SEPARATOR = "\x1f"  # chr(31) between fields in songs.search_text
 
 
 def _contains_pattern(text: str) -> str:
-    """ILIKE pattern matching `text` literally (user input never acts as a wildcard)."""
+    """LIKE pattern matching `text` literally (user input never acts as a wildcard)."""
     escaped = (
         text.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
         .replace("%", f"{_LIKE_ESCAPE}%")
@@ -24,21 +25,20 @@ def list_songs(db: Session, *, skip: int = 0, limit: int = 50) -> list[Song]:
     return list(db.scalars(select(Song).order_by(Song.id).offset(skip).limit(limit)))
 
 
-def search(db: Session, query: str, *, limit: int = 50) -> list[Song]:
-    pattern = _contains_pattern(query)
-    stmt = (
+def search_query(query: str, *, limit: int = 50) -> Select:
+    """Case-insensitive substring of title, artist or album via the pre-lowered `search_text`.
+    Lowering the pattern in SQL keeps both sides on the database's case rules."""
+    pattern = _contains_pattern(query.replace(_FIELD_SEPARATOR, ""))
+    return (
         select(Song)
-        .where(
-            or_(
-                Song.title.ilike(pattern, escape=_LIKE_ESCAPE),
-                Song.artist.ilike(pattern, escape=_LIKE_ESCAPE),
-                Song.album.ilike(pattern, escape=_LIKE_ESCAPE),
-            )
-        )
+        .where(Song.search_text.like(func.lower(pattern), escape=_LIKE_ESCAPE))
         .order_by(Song.title, Song.id)
         .limit(limit)
     )
-    return list(db.scalars(stmt))
+
+
+def search(db: Session, query: str, *, limit: int = 50) -> list[Song]:
+    return list(db.scalars(search_query(query, limit=limit)))
 
 
 def list_by_category(db: Session, category: str, *, limit: int = 50) -> list[Song]:

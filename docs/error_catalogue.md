@@ -23,6 +23,8 @@ Source of truth: `app/core/errors.py`. Every error response has this shape:
 | `NOT_ROOM_PARTICIPANT` | 403 | Room action by a user who has not joined |
 | `NOT_ROOM_CONTROLLER` | 403 | Transfer-access by someone who is neither admin nor controller; over WebSocket, a playback event from a non-controller |
 | `NO_CURRENT_SONG` | 409 | Over WebSocket: `play` / `pause` / `seek` before the room has a song |
+| `UNSUPPORTED_FILE_TYPE` | 415 | Admin upload with an audio or cover file whose extension is not allowed. `details` = `{ field, allowed }` |
+| `FILE_TOO_LARGE` | 413 | Admin upload over the size limit (audio 50 MB, cover 5 MB). `details` = `{ field, max_bytes }` |
 | `NOT_FOUND` | 404 | Unknown route |
 | `METHOD_NOT_ALLOWED` | 405 | Wrong HTTP method for a route |
 | `HTTP_ERROR` | varies | Any other framework-level HTTP error |
@@ -101,3 +103,18 @@ All room routes require `Authorization: Bearer <JWT>`; without a valid token →
 | `POST /rooms/{room_id}/transfer-access` `{ "target_user_id": 7 }` | `200` `RoomOut` with the new `controller_user_id` | `403 NOT_ROOM_CONTROLLER` (caller is neither admin nor controller), `403 NOT_ROOM_PARTICIPANT` (target has not joined), `404`, `410` |
 
 WebSocket errors are sent as `error` events, not HTTP responses; see `docs/websocket_contract.md`.
+
+## Admin examples (Phase 6)
+
+All `/admin/*` routes need an admin JWT: no/invalid token → `401 INVALID_TOKEN`; non-admin → `403 ADMIN_REQUIRED`.
+
+| Request | Success | Errors |
+| --- | --- | --- |
+| `POST /admin/songs` (multipart: `title`, `artist`, `album?`, `category`, `duration_seconds`, `audio_file`, `cover_file?`) | `201` `SongOut`; files stored under `MEDIA_ROOT` with random names and served from `/media/audio/…`, `/media/covers/…`; text fields trimmed, blank `album` → `null` | `415 UNSUPPORTED_FILE_TYPE` (audio: `.mp3 .wav .ogg .oga .opus .m4a .aac .flac .webm`; cover: `.jpg .jpeg .png .webp .gif` — no SVG/HTML, since `/media` is served from the API origin), `413 FILE_TOO_LARGE`, `422 VALIDATION_ERROR` (blank title/artist/category, title > 200, category > 50, duration < 0 or > 24 h, empty file). Nothing is left on disk when an upload is rejected |
+| `DELETE /admin/songs/{song_id}` | `204`; likes and plays cascade-deleted; rooms playing it get no current song; its audio/cover files are removed unless another song still uses them (seed songs share album covers) | `404 SONG_NOT_FOUND` |
+| `GET /admin/users?skip=&limit=` | `200` users by id (never password fields; `limit` 1–500, default 100) | `422 VALIDATION_ERROR` |
+| `GET /admin/rooms` | `200` active rooms, newest first | — |
+
+## Logging
+
+Server logs never contain JWTs: the room WebSocket URL carries the token as `?token=`, and `app/core/log_redaction.py` rewrites it to `token=[redacted]` on the `uvicorn.error` and `uvicorn.access` loggers (`tests/test_log_redaction.py`).
