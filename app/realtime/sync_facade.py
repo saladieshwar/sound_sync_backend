@@ -17,6 +17,11 @@ def _read_controller_id(room_id: str) -> int | None:
         return room.controller_user_id if room else None
 
 
+def room_lock(room_id: str):
+    """See ConnectionManager.room_lock. Callers holding it use manager.broadcast directly."""
+    return manager.room_lock(room_id)
+
+
 async def connect(room_id: str, user_id: int, websocket: WebSocket) -> bool:
     """Accepts and registers the socket; returns True if the user just came online."""
     await websocket.accept()
@@ -39,11 +44,12 @@ async def broadcast(
     sender_user_id: int | None = None,
     exclude: WebSocket | None = None,
 ) -> None:
-    await manager.broadcast(
-        room_id,
-        ServerMessage(type=event_type, payload=payload or {}, sender_user_id=sender_user_id),
-        exclude=exclude,
-    )
+    async with manager.room_lock(room_id):
+        await manager.broadcast(
+            room_id,
+            ServerMessage(type=event_type, payload=payload or {}, sender_user_id=sender_user_id),
+            exclude=exclude,
+        )
 
 
 async def validate_controller(room_id: str, user_id: int) -> bool:
@@ -53,9 +59,11 @@ async def validate_controller(room_id: str, user_id: int) -> bool:
 
 async def remove_user(room_id: str, user_id: int) -> None:
     """After a REST leave: the user's sockets are closed so they stop receiving room events."""
-    await manager.close_user(room_id, user_id)
+    async with manager.room_lock(room_id):
+        await manager.close_user(room_id, user_id)
 
 
 async def close_room(room_id: str) -> None:
-    await broadcast(room_id, EventType.ROOM_CLOSED)
-    await manager.close_room(room_id)
+    async with manager.room_lock(room_id):
+        await manager.broadcast(room_id, ServerMessage(type=EventType.ROOM_CLOSED))
+        await manager.close_room(room_id)

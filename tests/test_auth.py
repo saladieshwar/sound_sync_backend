@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -230,6 +231,23 @@ def test_admin_route_forbidden_for_regular_user(client, auth_headers):
 
 def test_unknown_route_uses_structured_error(client):
     _assert_error(client.get("/does-not-exist"), 404, "NOT_FOUND")
+
+
+def test_wrong_method_uses_structured_error(client):
+    response = client.delete("/health")
+    _assert_error(response, 405, "METHOD_NOT_ALLOWED")
+    assert response.headers["allow"] == "GET"
+
+
+def test_other_framework_http_errors_use_structured_error():
+    app = create_app()
+
+    @app.get("/teapot")
+    def teapot():
+        raise HTTPException(status_code=418, detail="I'm a teapot")
+
+    error = _assert_error(TestClient(app).get("/teapot"), 418, "HTTP_ERROR")
+    assert error["message"] == "I'm a teapot"
 
 
 def test_unhandled_exception_returns_structured_500():

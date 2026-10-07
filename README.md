@@ -8,6 +8,8 @@ FastAPI service covering three handbook stacks:
 | RT (room sync engine) | `app/realtime/` |
 | DATA (PostgreSQL) | `app/models/`, `alembic/`, `scripts/` |
 
+**Documentation:** start at [`docs/documentation_checklist.md`](docs/documentation_checklist.md) (index of every document). Clean-machine setup and every setting: [`docs/setup_guide.md`](docs/setup_guide.md). Database setup, backup and restore: [`docs/db_runbook.md`](docs/db_runbook.md).
+
 ## Prerequisites
 
 - Python 3.11+
@@ -48,9 +50,11 @@ FastAPI service covering three handbook stacks:
 4. Run and verify:
 
    ```powershell
+   python -m scripts.check_db
    fastapi dev app/main.py
    ```
 
+   - `check_db` prints `OK` for the connection, migration, `pg_trgm`, tables, seed accounts, seed catalog and media files
    - `GET http://localhost:8000/health` → `{"status": "ok"}`
    - `GET http://localhost:8000/ready` → `{"status": "ready", "database": "up"}`
    - Swagger UI: `http://localhost:8000/docs`
@@ -64,6 +68,9 @@ FastAPI service covering three handbook stacks:
 | Schema | BE, QA | `docs/schema.md`, `alembic/versions/` |
 | Error catalogue | FE, QA | `docs/error_catalogue.md` |
 | Sync tuning notes and performance budgets | RT, DATA, QA | `docs/sync_tuning.md` |
+| Build, configuration, API reference | All | `docs/setup_guide.md` |
+| Database runbook (init, seed, backup, restore) | DATA, QA | `docs/db_runbook.md` |
+| Error-handling cross-check | QA | `docs/qa/error_crosscheck.md` |
 | Acceptance matrix | All | `docs/qa/acceptance_matrix.md` |
 
 Regenerate the OpenAPI snapshot after changing endpoints:
@@ -112,6 +119,12 @@ python -m scripts.browser_e2e http://localhost:5173 http://localhost:8000   # QA
 ```
 
 `browser_e2e` drives headless Microsoft Edge (set `BROWSER_PATH` for Chrome) and needs the API's `CORS_ORIGINS` to include the app URL.
+
+Phase 7 (documentation):
+
+- `tests/test_docs.py` — the docs match the code: OpenAPI snapshot, every error code, WebSocket event, setting, script, link, frontend route and API function is documented; every test named in `docs/qa/error_crosscheck.md` exists.
+- `tests/test_check_db.py` — `scripts/check_db.py` passes on a seeded database and catches missing or changed seed rows.
+- `python -m scripts.restore_check <empty database name or URL>` — full backup and restore, compared table by table with the source (see `docs/db_runbook.md` section 8).
 
 ## Multi-device room testing (same Wi-Fi)
 

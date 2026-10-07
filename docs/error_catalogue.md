@@ -8,6 +8,8 @@ Source of truth: `app/core/errors.py`. Every error response has this shape:
 
 `message` is safe to show to users. `details` carries machine-readable context (e.g. field errors).
 
+Every code below is checked against `app/core/errors.py` and has at least one passing test: see [`qa/error_crosscheck.md`](qa/error_crosscheck.md) (kept in sync by `tests/test_docs.py`).
+
 ## Codes
 
 | Code | HTTP | When |
@@ -29,6 +31,10 @@ Source of truth: `app/core/errors.py`. Every error response has this shape:
 | `METHOD_NOT_ALLOWED` | 405 | Wrong HTTP method for a route |
 | `HTTP_ERROR` | varies | Any other framework-level HTTP error |
 | `INTERNAL_ERROR` | 500 | Unhandled server error; internal details are never included |
+
+Health endpoints are for monitoring and do not use the error shape: `GET /health` is always `200 {"status": "ok"}` while the process runs; `GET /ready` is `200 {"status": "ready", "database": "up"}` or `503 {"status": "unavailable", "database": "down"}`.
+
+WebSocket errors are not HTTP responses: they arrive as `{ "type": "error", "payload": { "code": … } }` with the codes `INVALID_MESSAGE`, `INVALID_PAYLOAD`, `EVENT_NOT_ALLOWED`, `NOT_ROOM_CONTROLLER`, `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED` (meanings in `docs/websocket_contract.md` → "Error codes").
 
 ## Auth examples (Phase 2)
 
@@ -81,6 +87,7 @@ Catalog reads (`/songs/*`) are public. Library routes (`/users/me/*`) require `A
 | --- | --- | --- |
 | `GET /songs?skip=&limit=` | `200` song list (`skip` ≥ 0, `limit` 1–200) | `422 VALIDATION_ERROR` |
 | `GET /songs/search?q=rain` | `200` matching songs; no match → `[]` | `422 VALIDATION_ERROR` when `q` is missing, blank, or > 100 chars |
+| `GET /songs/categories` | `200` distinct category names, sorted | — |
 | `GET /songs/category/{name}` | `200` songs in that category; unknown → `[]` | — |
 | `GET /songs/albums`, `GET /songs/album/{name}` | `200` | — |
 | `GET /songs/{song_id}` | `200` song | `404 SONG_NOT_FOUND`; non-integer id → `422 VALIDATION_ERROR` |

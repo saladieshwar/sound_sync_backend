@@ -1,4 +1,4 @@
-"""Phase 5 - multi-client room sync over a real WebSocket server (RT + BE + QA).
+﻿"""Phase 5 - multi-client room sync over a real WebSocket server (RT + BE + QA).
 
 The WS route opens its own DB sessions, so these tests run a live uvicorn server in a background
 thread against the configured database. Every user/song created here is deleted at teardown
@@ -6,10 +6,14 @@ thread against the configured database. Every user/song created here is deleted 
 """
 
 import json
+import threading
 import time
 
 import pytest
+from sqlalchemy import update
 
+from app.db.session import SessionLocal
+from app.models import MusicalRoom, RoomStatus
 from tests.live import Peer, assert_closed, assert_silent, cleanup_rows, expect, live_server, make_songs, send
 
 # A broadcast must reach every client well inside the drift tolerance (0.5 s).
@@ -250,6 +254,32 @@ def test_second_tab_does_not_duplicate_presence(peers, room):
         assert expect(a, "user_left")["payload"]["user_id"] == bob.id
 
 
+# --- ordering guarantees ------------------------------------------------------------
+
+
+def test_joiner_mid_burst_sees_events_in_commit_order_with_no_gap(peers, room, songs):
+    admin, bob = peers["admin"], peers["bob"]
+    positions = [float(p) for p in range(1, 41)]
+    with admin.open(room) as (a, _):
+        send(a, "song_change", position_seconds=0, song_id=songs[0])
+        expect(a, "song_change")
+        send(a, "pause", position_seconds=0)
+        expect(a, "pause")
+
+        burst = threading.Thread(
+            target=lambda: [send(a, "seek", position_seconds=p) for p in positions]
+        )
+        burst.start()
+        with bob.open(room) as (b, state):
+            seen = [state["position_seconds"]]
+            while seen[-1] != positions[-1]:
+                seen.append(expect(b, "seek")["payload"]["position_seconds"])
+        burst.join()
+
+        assert all(earlier < later for earlier, later in zip(seen, seen[1:])), seen
+        assert [expect(a, "seek")["payload"]["position_seconds"] for _ in positions] == positions
+
+
 # --- clock sync ---------------------------------------------------------------------
 
 
@@ -304,4 +334,19 @@ def test_binary_frame_gets_error_and_socket_stays_up(peers, room, songs):
         assert expect(a, "error")["payload"] == {"code": "INVALID_MESSAGE"}
         send(a, "song_change", position_seconds=0, song_id=songs[0])
         expect(a, "song_change")
+
+
+def test_playback_after_room_closed_meanwhile_gets_room_closed_then_1008(peers, room, songs):
+    with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+        expect(a, "user_joined")
+        with SessionLocal() as db:
+            db.execute(
+                update(MusicalRoom).where(MusicalRoom.id == room).values(status=RoomStatus.CLOSED)
+            )
+            db.commit()
+
+        send(a, "play", position_seconds=0)
+        assert expect(a, "error")["payload"] == {"code": "ROOM_CLOSED"}
+        assert_closed(a, 1008)
+        assert expect(b, "user_left")["payload"] == {"user_id": peers["admin"].id, "reason": "disconnected"}
 
