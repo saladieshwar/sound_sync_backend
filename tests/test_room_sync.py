@@ -382,6 +382,26 @@ def test_second_tab_does_not_duplicate_presence(peers, room):
         assert expect(a, "user_left")["payload"]["user_id"] == bob.id
 
 
+# --- clock sync ---------------------------------------------------------------------
+
+
+def test_time_sync_is_answered_only_to_the_sender(peers, room):
+    with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+        expect(a, "user_joined")
+        before = time.time() * 1000
+        send(b, "time_sync", client_ts=123456.5)
+        reply = expect(b, "time_sync")
+        assert reply["payload"] == {"client_ts": 123456.5}
+        assert before - 1000 <= reply["server_ts"] <= time.time() * 1000 + 1000
+        assert_silent(a)
+
+
+def test_time_sync_without_client_ts_is_invalid(peers, room):
+    with peers["admin"].open(room) as (a, _):
+        send(a, "time_sync")
+        assert expect(a, "error")["payload"] == {"code": "INVALID_PAYLOAD"}
+
+
 # --- resilience (ROOM-12) -----------------------------------------------------------
 
 

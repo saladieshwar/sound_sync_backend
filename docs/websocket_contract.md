@@ -1,6 +1,6 @@
 # WebSocket Event Contract (RT → FE/BE)
 
-Status: **Frozen v1.1** (Phase 5). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge.
+Status: **Frozen v1.2** (Phase 5). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge.
 
 ## Changelog
 
@@ -8,6 +8,7 @@ Status: **Frozen v1.1** (Phase 5). Source of truth: `app/realtime/events.py`. Ch
 | --- | --- | --- |
 | v1.0 | 2026-10-03 | Phase 1 baseline |
 | v1.1 | 2026-10-03 | Phase 5 delivery. Additive only: playback broadcasts carry the authoritative `is_playing`; `room_state` adds `online_user_ids`; new `error` codes `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED`; close codes documented; presence events are per user (second tab does not re-announce); rejected sockets are accepted then closed with `1008` so browsers can read the code |
+| v1.2 | 2026-10-07 | Additive only: `time_sync` event (client clock-offset estimation, answered to the sender only); clients follow the room timeline on the server clock with continuous drift correction instead of a 0.5 s seek-only tolerance |
 
 ## Connection
 
@@ -39,12 +40,39 @@ Server → client (playback broadcast, sent to **every** socket in the room incl
 { "type": "seek", "payload": { "song_id": 3, "position_seconds": 42.5, "is_playing": true }, "sender_user_id": 7, "server_ts": 1780000000000 }
 ```
 
-The broadcast payload is the room state **as persisted** (position clamped to the song length), not an echo of the client payload. `server_ts` is epoch milliseconds. Clients reconcile latency with:
-`expected_position = position_seconds + (now - server_ts) / 1000` while `is_playing`.
+The broadcast payload is the room state **as persisted** (position clamped to the song length), not an echo of the client payload. `server_ts` is epoch milliseconds on the **server** clock.
 
-For `room_state`, first advance the snapshot on the server clock: `position_seconds + (server_ts - state_updated_at) / 1000` while `is_playing`, then apply the same latency correction.
+### Clock sync (`time_sync`)
 
-**Drift tolerance: 0.5 s.** Clients only seek their local audio when it is more than 0.5 s away from the room position (`DRIFT_TOLERANCE_SECONDS` in `frontend/src/realtime/events.js`). Measured delivery latency on a LAN host is ~10 ms p50 / ~15 ms p95 (`scripts/room_sync_check.py`).
+Device clocks can differ from the server by a second or more, so clients never compare `server_ts` with their own `Date.now()`. Instead they estimate the server clock NTP-style:
+
+```json
+{ "type": "time_sync", "payload": { "client_ts": 1780000000000 } }
+{ "type": "time_sync", "payload": { "client_ts": 1780000000000 }, "sender_user_id": 7, "server_ts": 1780000001512 }
+```
+
+The server answers only the sender, echoing `client_ts` and stamping `server_ts`. With `received` = local time the reply arrived:
+`rtt = received - client_ts`, `offset = server_ts - (client_ts + rtt / 2)`, `server_now = Date.now() + offset`.
+The FE sends 5 samples 200 ms apart on every connect, then one every 30 s, and uses the sample with the lowest `rtt` (`frontend/src/realtime/serverClock.js`). `time_sync` is never broadcast and never changes room state.
+
+### Room timeline
+
+Each playback event defines a timeline: the room is at `position_seconds` at server time `server_ts`. While `is_playing`:
+`expected_position = position_seconds + (server_now - server_ts) / 1000`.
+
+For `room_state`, first advance the snapshot to `server_ts`: `position_seconds + (server_ts - state_updated_at) / 1000` while `is_playing`.
+
+**Drift correction** (constants in `frontend/src/realtime/events.js`). Clients never change `playbackRate`: browsers time-stretch audio at any rate other than 1.0, which sounds choppy on phones. Every 250 ms a client reads its drift from `expected_position`; decisions use the median of 4 readings, so one noisy reading never triggers a jump.
+
+| When | Action |
+| --- | --- |
+| After a play / seek / join (settling) | Once audio has run 0.75 s, if the gap is > 40 ms, make one small jump; up to 3 tries, usually 1 |
+| Settled, gap ≤ 150 ms | Leave the audio alone (no jumps for the rest of the song) |
+| Settled, gap > 150 ms (e.g. after a network stall) | Jump back in sync, then settle again |
+
+Each jump lands at `expected_position + seek_lead`, where `seek_lead` is learned per device from how late its audio resumes after the client's own jumps, so after the first jump on a device later jumps land on time.
+
+Buffering is skipped (no correction while the audio is stalled) and caught up afterwards. Measured delivery latency on a LAN host is ~10 ms p50 / ~15 ms p95 (`scripts/room_sync_check.py`).
 
 ## Event types
 
@@ -60,6 +88,7 @@ For `room_state`, first advance the snapshot on the server clock: `position_seco
 | `user_left` | server → client | `user_id`, `reason` (`left` / `disconnected`), `controller_user_id` (when `left`) |
 | `room_state` | server → new socket | full `RoomOut` snapshot + `online_user_ids` |
 | `room_closed` | server → client | `{}` (admin left; sockets then close with `1000`) |
+| `time_sync` | client → server → sender | `client_ts` (epoch ms, echoed back with `server_ts`) |
 | `error` | server → sender | `code` (see below); the socket stays open unless noted |
 
 Client `song_id` on `play`/`pause`/`seek` is optional and ignored; the server uses the room's current song.
@@ -69,7 +98,7 @@ Client `song_id` on `play`/`pause`/`seek` is optional and ignored; the server us
 | Code | When |
 | --- | --- |
 | `INVALID_MESSAGE` | Not JSON, binary frame, missing `type`, or unknown event type |
-| `INVALID_PAYLOAD` | `position_seconds` missing / negative / > 86400, or `song_change` without `song_id` |
+| `INVALID_PAYLOAD` | `position_seconds` missing / negative / > 86400, `song_change` without `song_id`, or `time_sync` without a numeric `client_ts` |
 | `EVENT_NOT_ALLOWED` | Client sent a server-only event (`room_state`, `access_transfer`, …) |
 | `NOT_ROOM_CONTROLLER` | Sender is not the current `controller_user_id` |
 | `NO_CURRENT_SONG` | `play` / `pause` / `seek` before any `song_change` |
@@ -80,7 +109,7 @@ Rejected messages are never broadcast and never change room state.
 
 ## Rules
 
-- Only playback events (`play`, `pause`, `seek`, `song_change`) are accepted from clients.
+- Only playback events (`play`, `pause`, `seek`, `song_change`) and `time_sync` are accepted from clients. `time_sync` needs no controller rights.
 - A playback event is applied and broadcast only if the sender is the room's current `controller_user_id`, read from the DB under a row lock on each message (never trusted from the client), so a transfer that commits first always wins.
 - Accepted playback events are persisted through BE (`room_service.apply_playback_event`) before broadcast. `song_change` starts playing; `pause` stops; `seek` keeps the current play state.
 - Control transfer happens over REST (`POST /rooms/{id}/transfer-access`); RT then broadcasts `access_transfer`.

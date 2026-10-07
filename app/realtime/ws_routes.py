@@ -17,6 +17,7 @@ from app.realtime.events import (
     EventType,
     PlaybackPayload,
     ServerMessage,
+    TimeSyncPayload,
 )
 from app.repositories import room_repo
 from app.services import room_service
@@ -105,6 +106,17 @@ async def room_socket(websocket: WebSocket, room_id: str, token: str = Query("")
             message = await _receive_message(websocket)
             if message is None:
                 await _send_error(websocket, "INVALID_MESSAGE")
+                continue
+            if message.type == EventType.TIME_SYNC:
+                try:
+                    sync = TimeSyncPayload.model_validate(message.payload)
+                except ValidationError:
+                    await _send_error(websocket, "INVALID_PAYLOAD")
+                    continue
+                await manager.send(
+                    websocket,
+                    ServerMessage(type=EventType.TIME_SYNC, payload={"client_ts": sync.client_ts}),
+                )
                 continue
             if message.type not in PLAYBACK_EVENTS:
                 await _send_error(websocket, "EVENT_NOT_ALLOWED")
