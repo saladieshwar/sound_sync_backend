@@ -226,6 +226,32 @@ New cases:
 
 Regression: every Phase 1–5 case above was re-run in the same `pytest` / `npm test` run (all green).
 
+## Phase 7 results — Documentation & Packaging
+
+Run 2026-10-07. Backend: `pytest` (220 passed; 18 new: `tests/test_docs.py`, `tests/test_check_db.py`, error-path tests in `test_auth.py`, `test_health.py`, `test_room_sync.py`). Frontend: `npm test` (186 passed), lint and build OK. Documentation pack and checklist: `docs/documentation_checklist.md`, which includes the clean-copy verification run.
+
+| ID | Case | Expected | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| DOC-01 | Clean machine builds and runs from the docs | Fresh venv + `npm ci` from tracked source only; tests, build and API start succeed | Pass | `documentation_checklist.md` → "Verification run" (220 + 186 tests, `/health` `/ready` `/docs` 200) |
+| DOC-02 | Every setting documented | Every `Settings` field in `.env.example` and `setup_guide.md` | Pass | `test_every_setting_is_in_env_example_and_setup_guide` |
+| DOC-03 | OpenAPI is final | Snapshot equals the running code | Pass | `test_openapi_snapshot_matches_the_code` |
+| DOC-04 | WebSocket reference complete | Every event and error code documented; ordering guarantees enforced | Pass | `test_websocket_contract_lists_every_event_and_error_code`, `test_joiner_mid_burst_sees_events_in_commit_order_with_no_gap` (5/5 repeated runs) |
+| DOC-05 | QA can recreate fixtures from docs | `check_db` all OK after runbook steps (fresh server: setup, migrate, seed; and reset path); expected seed results match the API | Pass | `test_check_db_passes_on_a_migrated_seeded_database`, `test_check_db_detects_missing_or_changed_seed_rows`; clean-copy seed + `check_db`; runbook expectations checked against the live API |
+| DOC-06 | Backup is restorable | Full restore onto a fresh server reproduces every table, row, index, constraint, sequence, extension, migration version and media file; app works on the copy | Pass | `python -m scripts.restore_check` (21 × OK, empty restore and `--clean` restore); `pytest` 220 passed on the restored copy; `db_runbook.md` section 8 |
+| DOC-07 | UI guide complete | Every route and API function documented | Pass | `test_every_frontend_route_is_in_the_ui_guide`, `test_every_frontend_api_function_is_in_the_ui_guide` |
+| DOC-08 | Error suite documented and passing | Every REST and WebSocket error code documented, tested and handled in the UI | Pass | `docs/qa/error_crosscheck.md`; `test_error_crosscheck_covers_every_code_with_existing_passing_tests` |
+| DOC-09 | Documentation pack consistent | All relative links resolve; every documented script exists | Pass | `test_relative_links_resolve`, `test_documented_scripts_exist` |
+| RES-02 | DB down | `/health` 200, `/ready` 503 | Pass (now automated) | `test_ready_is_503_when_database_is_down` |
+| ROOM-05 | Multi-device sync | Late joiner never misses an event | Pass (hardened) | Per-room ordering lock; `test_joiner_mid_burst_sees_events_in_commit_order_with_no_gap` |
+
+Defects found and fixed during Phase 7:
+
+- A device joining while the controller was seeking could miss that event and stay on an old position until the next action. Fixed by per-room serialization (contract v1.3).
+- After a WebSocket `ROOM_CLOSED` error the socket ended without a close frame, so the client retried pointlessly. The server now closes with `1008`.
+- `FORBIDDEN` and `USER_NOT_FOUND` were defined but never used, so they were removed.
+- `/songs/categories` was missing from the error catalogue.
+- The backend repo tracked `venv/`, `.venv/` and `__pycache__` (16,000+ files); they are now untracked.
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |
@@ -236,3 +262,4 @@ Regression: every Phase 1–5 case above was re-run in the same `pytest` / `npm 
 | Eshwar (saladieshwar) | DATA | Yes | 2026-10-03 | Seed fixtures cover CAT/LIB cases |
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-03 | Matrix approved as Phase 1 baseline |
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-07 | Phase 6: critical E2E green, no broken sync on normal networks, all performance budgets met |
+| Eshwar (saladieshwar) | ALL | Yes | 2026-10-07 | Phase 7: documentation checklist satisfied; error suite documented and passing |

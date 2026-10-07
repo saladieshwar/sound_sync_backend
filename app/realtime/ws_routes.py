@@ -88,14 +88,14 @@ async def room_socket(websocket: WebSocket, room_id: str, token: str = Query("")
         await _reject(websocket)
         return
 
-    snapshot = await run_in_threadpool(_authorize, room_id, user_id)
-    if snapshot is None:
-        await _reject(websocket)
-        return
-
-    came_online = await sync_facade.connect(room_id, user_id, websocket)
-    snapshot["online_user_ids"] = sync_facade.online_user_ids(room_id)
-    await manager.send(websocket, ServerMessage(type=EventType.ROOM_STATE, payload=snapshot))
+    async with sync_facade.room_lock(room_id):
+        snapshot = await run_in_threadpool(_authorize, room_id, user_id)
+        if snapshot is None:
+            await _reject(websocket)
+            return
+        came_online = await sync_facade.connect(room_id, user_id, websocket)
+        snapshot["online_user_ids"] = sync_facade.online_user_ids(room_id)
+        await manager.send(websocket, ServerMessage(type=EventType.ROOM_STATE, payload=snapshot))
     if came_online:
         await sync_facade.broadcast(
             room_id, EventType.USER_JOINED, {"user_id": user_id}, user_id, exclude=websocket
@@ -130,15 +130,20 @@ async def room_socket(websocket: WebSocket, room_id: str, token: str = Query("")
                 await _send_error(websocket, "INVALID_PAYLOAD")
                 continue
 
-            state, error = await run_in_threadpool(
-                _apply_playback, room_id, user_id, message.type, payload
-            )
+            async with sync_facade.room_lock(room_id):
+                state, error = await run_in_threadpool(
+                    _apply_playback, room_id, user_id, message.type, payload
+                )
+                if not error:
+                    await manager.broadcast(
+                        room_id,
+                        ServerMessage(type=message.type, payload=state, sender_user_id=user_id),
+                    )
             if error:
                 await _send_error(websocket, error)
                 if error in (ErrorCode.ROOM_CLOSED, ErrorCode.ROOM_NOT_FOUND):
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     break
-                continue
-            await sync_facade.broadcast(room_id, message.type, state, sender_user_id=user_id)
     except WebSocketDisconnect:
         pass
     except Exception:

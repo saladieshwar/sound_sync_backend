@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import weakref
 from collections import defaultdict
 
 from fastapi import WebSocket, status
@@ -18,6 +19,19 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._rooms: dict[str, dict[WebSocket, int]] = defaultdict(dict)
         self._lock = asyncio.Lock()
+        self._room_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
+
+    def room_lock(self, room_id: str) -> asyncio.Lock:
+        """Held while a room event is persisted and broadcast, and while a new socket reads its
+        `room_state`, so every socket sees the room's events in the order they were committed and
+        none falls between a snapshot and the first broadcast. Not re-entrant."""
+        lock = self._room_locks.get(room_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._room_locks[room_id] = lock
+        return lock
 
     async def add(self, room_id: str, user_id: int, websocket: WebSocket) -> bool:
         """Registers the socket; returns True if this is the user's first socket in the room."""
