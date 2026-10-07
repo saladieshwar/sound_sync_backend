@@ -31,6 +31,8 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = "./media"
     MEDIA_URL_PREFIX: str = "/media"
+    MAX_AUDIO_UPLOAD_BYTES: int = 50 * 1024 * 1024
+    MAX_COVER_UPLOAD_BYTES: int = 5 * 1024 * 1024
 
     @model_validator(mode="after")
     def _require_strong_secret_outside_dev(self) -> "Settings":

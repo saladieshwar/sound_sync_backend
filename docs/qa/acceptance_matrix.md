@@ -186,6 +186,46 @@ Update 2026-10-07 (contract v1.2): clients now estimate the server clock with `t
 
 Manual two-device check (run once per release; setup in `backend/README.md` → "Multi-device room testing"): on device A create a room and copy the join link; on device B open the link and tap **Join Room** (also try typing the Room ID). Pick a song on A and confirm B hears it in step; pause, seek, and change song on A and confirm B follows within about half a second. Give control to B, drive playback from B, then give it back. Turn B's Wi-Fi off for ~10 s and on again: B shows **Reconnecting…**, then **Live**, and jumps to the room position. Leave on B (red **Leave Room** button) — B returns to the landing page and disappears from A's list. Finally leave on A — B is sent to the landing page with "The room was closed by its admin."
 
+## Phase 6 results — Integration & Performance
+
+Run 2026-10-07. Backend: `pytest` (202 passed; new `tests/test_e2e.py`, `tests/test_performance.py`, `tests/test_network_sync.py`, `tests/test_admin.py`, `tests/test_log_redaction.py`; shared live-server helpers in `tests/live.py`). Frontend: `npm test` (186 passed; new `journey.test.jsx`, `AdminPage.test.jsx`, auth retry and asymmetric-jitter clock tests), `npm run lint` (warnings only, no errors), `npm run build` OK. DB at migration `0005` (`search_text` + one trigram index, room FK and active-room indexes, `clock_timestamp()` room `created_at`); `alembic check` reports no drift; downgrade/upgrade verified. Sync targets and tuning notes: `docs/sync_tuning.md`.
+
+Scripts run against a live API + Vite build in headless Edge (two isolated browser profiles = two devices): `python -m scripts.browser_e2e` (all steps Pass; listener vs controller audio median 5–46 ms, max ≤ 69 ms, ≤ 1 correction jump), `python -m scripts.perf_smoke` (all budgets Pass), `python -m scripts.sync_benchmark` (all network profiles Pass), `python -m scripts.benchmark_catalog_rooms` (all budgets Pass).
+
+New cases:
+
+| ID | Case | Expected | Type | Owner |
+| --- | --- | --- | --- | --- |
+| E2E-01 | One API session across all modules: health → auth → catalog → library → room create/join → WS sync → transfer → leave → room closed | Every step returns the documented status/payload; WS events < 0.5 s | API/MD | BE/QA |
+| E2E-02 | One UI session: register → home → search → player → room → leave | No reload, no logout, URL path sequence as expected | UI | FE/QA |
+| E2E-03 | Two real browsers: login, home, play, room create/join, sync, transfer, leave, admin upload/delete | All steps Pass; listener audio within 150 ms of controller, ≤ 1 jump | UI/MD | QA |
+| PERF-01 | Catalog search on 50,000 songs | p95 ≤ 25 ms (3+ chars), ≤ 100 ms (1–2 chars); trigram index used | DB | DATA |
+| PERF-02 | Room join with 2,000 rooms / 20,000 participants | p95 ≤ 50 ms; lookups use indexes | DB | DATA |
+| PERF-03 | 10 concurrent users on the API (reads, writes, joins, broadcast, auth) | Within the budgets in `docs/sync_tuning.md` | API | QA |
+| SYNC-01 | Sync under LAN / Wi-Fi / 4G / poor network | Agreement p95 ≤ 40 ms (≤ 150 ms poor); reaction p95 ≤ 250 ms (≤ 500 ms poor) | MD | RT |
+| SEC-01 | Server logs while clients connect with `?token=<JWT>` | No JWT in any log line (`token=[redacted]`) | API | BE |
+| RES-04 | API briefly unreachable while a logged-in user reloads | Stays logged in, shows "Reconnecting…", resumes when the API is back | UI | FE |
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| E2E-01 | Pass | `test_full_journey_register_browse_play_room_sync_leave` (live uvicorn server, real HTTP + 2 WebSocket clients) |
+| E2E-02 | Pass | `journey.test.jsx` `completes register -> home -> player -> room -> leave in one uninterrupted session` (real `App`, all providers and routes) |
+| E2E-03 | Pass | `scripts/browser_e2e.py` run (see above) |
+| PERF-01 | Pass | `test_search_of_three_plus_chars_uses_the_trigram_index`, `test_search_matches_any_field_case_insensitively_but_not_across_fields`; benchmark 4–8 ms (3+ chars), 51 ms (1–2 chars) |
+| PERF-02 | Pass | `test_room_lookups_use_indexes`, `test_room_join_flow_meets_budget`; benchmark p95 15 ms, lookups 0.04–0.12 ms |
+| PERF-03 | Pass | `scripts/perf_smoke.py`: reads 11–21 ms, log play 25–39 ms, 9 simultaneous joins 162–181 ms, broadcast 14 ms, auth 0.6–1.1 s |
+| SYNC-01 | Pass | `test_sync_meets_targets_under_network_profile` (all 4 profiles), `test_server_clock_mirror_uses_min_rtt_sample`, `test_proxy_adds_delay_and_preserves_order`; FE `serverClock` asymmetric-jitter cases; agreement p95 lan 1.1, wifi 4.2, 4g 10.4, poor 29.9 ms |
+| SEC-01 | Pass | `test_server_logs_never_contain_the_jwt`, `test_install_is_idempotent_and_runs_with_the_app`, `test_redact_leaves_other_text_alone`; live server log checked: 0 JWTs |
+| RES-04 | Pass | `AuthContext.test.jsx` `keeps the stored token and retries while the server is unreachable` |
+| ADM-01 | Pass | `test_upload_creates_searchable_song_with_served_files`, `test_upload_without_cover_or_album`, `test_upload_rejects_unsupported_file_types` (415), `test_upload_rejects_oversized_files_and_cleans_up` (413), `test_upload_rejects_empty_audio`, `test_upload_validates_metadata`; FE `uploads the form as multipart data and confirms`, `shows the API reason when an upload is rejected`, `only offers supported file types in the picker`; browser admin flow (upload → searchable → audio served) |
+| ADM-02 | Pass | `test_admin_routes_require_admin` (every `/admin/*` route) |
+| ADM-04 | Pass | `test_admin_lists_users_without_secrets`, `test_admin_lists_only_active_rooms_newest_first`; FE `lists users with their role`, `lists active rooms`, `shows an error with retry instead of an empty table when loading fails`, `says so when there are no active rooms`; browser admin flow (Users and Rooms tabs) |
+| ADM-05 | Pass | `test_admin_delete_removes_song_library_rows_and_files`, `test_admin_delete_keeps_files_other_songs_still_use`, `test_admin_delete_unknown_song_is_404`; FE `deletes a song after confirmation and refreshes the list`, `does nothing when the confirmation is cancelled`; browser admin flow (delete → 404) |
+| ROOM-05 | Pass | Re-verified under realistic networks (SYNC-01) and in real browsers (E2E-03) |
+| ROOM-11 | Pass | Re-verified: `test_network_drop_then_reconnect_resyncs` in the full run |
+
+Regression: every Phase 1–5 case above was re-run in the same `pytest` / `npm test` run (all green).
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |
@@ -195,3 +235,4 @@ Manual two-device check (run once per release; setup in `backend/README.md` → 
 | Eshwar (saladieshwar) | RT | Yes | 2026-10-03 | ROOM cases match `docs/websocket_contract.md` v1.1 |
 | Eshwar (saladieshwar) | DATA | Yes | 2026-10-03 | Seed fixtures cover CAT/LIB cases |
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-03 | Matrix approved as Phase 1 baseline |
+| Eshwar (saladieshwar) | QA | Yes | 2026-10-07 | Phase 6: critical E2E green, no broken sync on normal networks, all performance budgets met |

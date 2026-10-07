@@ -63,6 +63,7 @@ FastAPI service covering three handbook stacks:
 | WebSocket events | FE, BE, QA | `docs/websocket_contract.md` |
 | Schema | BE, QA | `docs/schema.md`, `alembic/versions/` |
 | Error catalogue | FE, QA | `docs/error_catalogue.md` |
+| Sync tuning notes and performance budgets | RT, DATA, QA | `docs/sync_tuning.md` |
 | Acceptance matrix | All | `docs/qa/acceptance_matrix.md` |
 
 Regenerate the OpenAPI snapshot after changing endpoints:
@@ -92,6 +93,25 @@ Live multi-client check against a running API (prints delivery latency; cleans u
 ```powershell
 python -m scripts.room_sync_check http://127.0.0.1:8000 20
 ```
+
+Phase 6 (integration and performance):
+
+- `tests/test_e2e.py` — the whole API journey on a live server: register → login → browse → search → play/like → create room → second user joins → both on WebSocket → controller drives playback → transfer → leave → room closed.
+- `tests/test_network_sync.py` — room sync under simulated LAN / Wi-Fi / 4G / poor networks (`scripts/netem_proxy.py`) against the agreed targets in `docs/sync_tuning.md`.
+- `tests/test_performance.py` — search and room-lookup query plans stay on their indexes; join budget.
+- `tests/test_admin.py` — admin upload (file types, size limits, cleanup), users/rooms lists, delete with media cleanup.
+- `tests/test_log_redaction.py` — JWTs never appear in server logs.
+
+Scripts (each cleans up after itself):
+
+```powershell
+python -m scripts.benchmark_catalog_rooms                       # DATA: 50k songs, 2k rooms; search + join budgets
+python -m scripts.sync_benchmark http://127.0.0.1:8000          # RT: sync under lan/wifi/4g/poor
+python -m scripts.perf_smoke http://127.0.0.1:8000 10           # QA: 10 concurrent users + room broadcast
+python -m scripts.browser_e2e http://localhost:5173 http://localhost:8000   # QA: two real browsers, full journey + admin
+```
+
+`browser_e2e` drives headless Microsoft Edge (set `BROWSER_PATH` for Chrome) and needs the API's `CORS_ORIGINS` to include the app URL.
 
 ## Multi-device room testing (same Wi-Fi)
 
