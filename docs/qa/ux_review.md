@@ -6,11 +6,11 @@ Release **1.0.0**, reviewed 2026-10-07. Defects found here are tracked in [`defe
 
 ## Result
 
-**Signed off for UAT.** Every main screen passed every automated layout and accessibility check at phone, tablet and desktop size (30 of 30), the real-browser journey passed three times in a row, and the screenshots below were reviewed by eye. All five UI/UX defects found (D-12, D-13, D-14, D-16, D-17) are fixed; none is open.
+**Signed off for UAT.** Every main screen passed every automated layout and accessibility check at phone, tablet and desktop size (33 of 33), the real-browser journey passed three times in a row, and the screenshots below were reviewed by eye. All five UI/UX defects found (D-12, D-13, D-14, D-16, D-17) are fixed; none is open.
 
 ## Method
 
-1. **Automated screen check**: `python -m scripts.ux_check` (API, frontend and seed data running). It drives one logged-in user in headless Edge through 10 screens at 3 sizes and checks on each:
+1. **Automated screen check**: `python -m scripts.ux_check` (API, frontend and seed data running). It drives one logged-in user in headless Edge through 11 screens at 3 sizes and checks on each:
 
    | Check | Rule |
    | --- | --- |
@@ -21,8 +21,8 @@ Release **1.0.0**, reviewed 2026-10-07. Defects found here are tracked in [`defe
    | Easy to tap | Buttons and sliders are at least 24 px tall and wide (WCAG 2.2 target size) |
    | No script errors | No uncaught error or rejected promise while the screen loads |
 
-   Sizes: phone 360 × 740, tablet 768 × 1024, desktop 1366 × 768. Screens: login, register, home (song playing), now playing, room landing, room (controlling playback), admin upload, admin songs, admin users, admin rooms. The user it creates is removed afterwards. Because the screenshots are committed, accounts and rooms that are not seed or check data are masked (`user@example.com`, "Another room") after the checks and before the screenshot.
-2. **Visual review** of the 30 screenshots it saves to [`ux/`](ux/).
+   Sizes: phone 360 × 740, tablet 768 × 1024, desktop 1366 × 768. Screens: login, register, home (song playing), album, now playing, room landing, room (controlling playback), admin upload, admin songs, admin users, admin rooms. The user it creates is removed afterwards. Because the screenshots are committed, accounts and rooms that are not seed or check data are masked (`user@example.com`, "Another room") after the checks and before the screenshot.
+2. **Visual review** of the 33 screenshots it saves to [`ux/`](ux/).
 3. **Behaviour**: `python -m scripts.browser_e2e` (two real browsers through login, play, room sync, transfer, leave and admin) and the frontend test suite (`npm test`, 189 tests).
 
 ## Results
@@ -32,6 +32,7 @@ Release **1.0.0**, reviewed 2026-10-07. Defects found here are tracked in [`defe
 | Login | Pass | Pass | Pass | Labelled fields; error announced to screen readers |
 | Register | Pass | Pass | Pass | Same; password managers offer a new password |
 | Home | Pass | Pass | Pass | Categories, albums, liked and recent rows; footer player clear of content |
+| Album | Pass | Pass | Pass | Cover, song count and length, Play all; playing song marked in the list |
 | Now Playing | Pass | Pass | Pass | Song title readable in the footer at every size (D-17) |
 | Room landing | Pass | Pass | Pass | Create and join forms side by side on desktop, stacked on phone |
 | Room | Pass | Pass | Pass | Room ID, Live status, join link with copy button, red Leave Room, room player, participants |
@@ -40,7 +41,7 @@ Release **1.0.0**, reviewed 2026-10-07. Defects found here are tracked in [`defe
 | Admin: Users | Pass | Pass | Pass | Role badges; no password data |
 | Admin: Rooms | Pass | Pass | Pass | Active rooms only, newest first |
 
-`ux_check` output: `30/30 screen x viewport checks passed.`
+`ux_check` output: `33/33 screen x viewport checks passed.`
 
 ## Screens
 
@@ -49,7 +50,7 @@ Release **1.0.0**, reviewed 2026-10-07. Defects found here are tracked in [`defe
 | ![Room on a phone](ux/room-phone.jpg) | ![Now Playing on a tablet](ux/now-playing-tablet.jpg) | ![Home on a desktop](ux/home-desktop.jpg) |
 | ![Admin upload on a phone](ux/admin-upload-phone.jpg) | ![Admin songs on a tablet](ux/admin-songs-tablet.jpg) | ![Room on a desktop](ux/room-desktop.jpg) |
 
-All 30 screenshots: [`ux/`](ux/) (`{screen}-{phone|tablet|desktop}.jpg`).
+All 33 screenshots: [`ux/`](ux/) (`{screen}-{phone|tablet|desktop}.jpg`).
 
 ## UI/UX defects fixed in Phase 8
 
