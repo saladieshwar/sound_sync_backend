@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import update
 
 from app.db.session import SessionLocal
-from app.models import MusicalRoom, RoomStatus
+from app.models import MusicalRoom, RoomStatus, User
 from tests.live import Peer, assert_closed, assert_silent, cleanup_rows, expect, live_server, make_songs, send
 
 # A broadcast must reach every client well inside the drift tolerance (0.5 s).
@@ -349,4 +349,32 @@ def test_playback_after_room_closed_meanwhile_gets_room_closed_then_1008(peers, 
         assert expect(a, "error")["payload"] == {"code": "ROOM_CLOSED"}
         assert_closed(a, 1008)
         assert expect(b, "user_left")["payload"] == {"user_id": peers["admin"].id, "reason": "disconnected"}
+
+
+def test_admin_deleting_the_playing_song_stops_the_room_for_everyone(peers, room, created):
+    [song_id] = make_songs(created, count=1)
+    site_admin = peers["carol"]
+    with SessionLocal() as db:
+        db.execute(update(User).where(User.id == site_admin.id).values(is_admin=True))
+        db.commit()
+    try:
+        with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+            expect(a, "user_joined")
+            send(a, "song_change", position_seconds=5, song_id=song_id)
+            for ws in (a, b):
+                expect(ws, "song_change")
+
+            assert site_admin.http.delete(f"/admin/songs/{song_id}").status_code == 204
+            stopped = {"song_id": None, "position_seconds": 0.0, "is_playing": False}
+            for ws in (a, b):
+                assert expect(ws, "pause")["payload"] == stopped
+            state = peers["bob"].http.get(f"/rooms/{room}").json()
+            assert (state["current_song_id"], state["is_playing"], state["position_seconds"]) == (None, False, 0.0)
+
+            send(a, "play", position_seconds=0)
+            assert expect(a, "error")["payload"] == {"code": "NO_CURRENT_SONG"}
+    finally:
+        with SessionLocal() as db:
+            db.execute(update(User).where(User.id == site_admin.id).values(is_admin=False))
+            db.commit()
 

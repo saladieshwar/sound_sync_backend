@@ -118,7 +118,7 @@ All `/admin/*` routes need an admin JWT: no/invalid token → `401 INVALID_TOKEN
 | Request | Success | Errors |
 | --- | --- | --- |
 | `POST /admin/songs` (multipart: `title`, `artist`, `album?`, `category`, `duration_seconds`, `audio_file`, `cover_file?`) | `201` `SongOut`; files stored under `MEDIA_ROOT` with random names and served from `/media/audio/…`, `/media/covers/…`; text fields trimmed, blank `album` → `null` | `415 UNSUPPORTED_FILE_TYPE` (audio: `.mp3 .wav .ogg .oga .opus .m4a .aac .flac .webm`; cover: `.jpg .jpeg .png .webp .gif` — no SVG/HTML, since `/media` is served from the API origin), `413 FILE_TOO_LARGE`, `422 VALIDATION_ERROR` (blank title/artist/category, title > 200, category > 50, duration < 0 or > 24 h, empty file). Nothing is left on disk when an upload is rejected |
-| `DELETE /admin/songs/{song_id}` | `204`; likes and plays cascade-deleted; rooms playing it get no current song; its audio/cover files are removed unless another song still uses them (seed songs share album covers) | `404 SONG_NOT_FOUND` |
+| `DELETE /admin/songs/{song_id}` | `204`; likes and plays cascade-deleted; active rooms playing it are stopped with no current song and their clients get a `pause` with `song_id: null` (`websocket_contract.md` v1.4); its audio/cover files are removed unless another song still uses them (seed songs share album covers) | `404 SONG_NOT_FOUND` |
 | `GET /admin/users?skip=&limit=` | `200` users by id (never password fields; `limit` 1–500, default 100) | `422 VALIDATION_ERROR` |
 | `GET /admin/rooms` | `200` active rooms, newest first | — |
 

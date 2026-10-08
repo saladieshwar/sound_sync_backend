@@ -12,7 +12,7 @@ from app.core.errors import register_exception_handlers
 
 def create_app() -> FastAPI:
     log_redaction.install()
-    app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+    app = FastAPI(title=settings.APP_NAME, version="1.0.0")
 
     app.add_middleware(
         CORSMiddleware,

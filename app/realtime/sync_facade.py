@@ -7,14 +7,24 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.db.session import SessionLocal
 from app.realtime.connection_manager import manager
+from app.models import RoomStatus
 from app.realtime.events import EventType, ServerMessage
 from app.repositories import room_repo
+from app.services import room_service
 
 
 def _read_controller_id(room_id: str) -> int | None:
     with SessionLocal() as db:
         room = room_repo.get_by_id(db, room_id)
         return room.controller_user_id if room else None
+
+
+def _read_playback(room_id: str) -> dict | None:
+    with SessionLocal() as db:
+        room = room_repo.get_by_id(db, room_id)
+        if room is None or room.status != RoomStatus.ACTIVE:
+            return None
+        return room_service.playback_payload(room)
 
 
 def room_lock(room_id: str):
@@ -50,6 +60,16 @@ async def broadcast(
             ServerMessage(type=event_type, payload=payload or {}, sender_user_id=sender_user_id),
             exclude=exclude,
         )
+
+
+async def resync_playback(room_id: str) -> None:
+    """After a server-side change to a room's playback (an admin deleted its song): broadcasts the
+    persisted state, read under the room lock so it can never overtake a newer controller event."""
+    async with manager.room_lock(room_id):
+        state = await run_in_threadpool(_read_playback, room_id)
+        if state is not None:
+            event = EventType.PLAY if state["is_playing"] else EventType.PAUSE
+            await manager.broadcast(room_id, ServerMessage(type=event, payload=state))
 
 
 async def validate_controller(room_id: str, user_id: int) -> bool:

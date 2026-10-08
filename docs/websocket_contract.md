@@ -1,6 +1,6 @@
 # WebSocket Event Contract (RT → FE/BE)
 
-Status: **Frozen v1.3** (Phase 7). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge. A new engineer can build a room client from this page alone: start with "Implementing a client" at the end.
+Status: **Frozen v1.4** (Phase 8). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge. A new engineer can build a room client from this page alone: start with "Implementing a client" at the end.
 
 ## Changelog
 
@@ -10,6 +10,7 @@ Status: **Frozen v1.3** (Phase 7). Source of truth: `app/realtime/events.py`. Ch
 | v1.1 | 2026-10-03 | Phase 5 delivery. Additive only: playback broadcasts carry the authoritative `is_playing`; `room_state` adds `online_user_ids`; new `error` codes `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED`; close codes documented; presence events are per user (second tab does not re-announce); rejected sockets are accepted then closed with `1008` so browsers can read the code |
 | v1.2 | 2026-10-07 | Additive only: `time_sync` event (client clock-offset estimation, answered to the sender only); clients follow the room timeline on the server clock with continuous drift correction instead of a 0.5 s seek-only tolerance. Phase 6: no message changes; measured sync under realistic networks and the agreed tolerance are in `docs/sync_tuning.md` |
 | v1.3 | 2026-10-07 | No message changes. Ordering guarantees documented and enforced (per-room serialization: a socket joining mid-burst can no longer miss an event committed between its `room_state` read and its registration); after an `error` `ROOM_CLOSED` the server now closes the socket with `1008` (was an unclean close that made clients retry); "Implementing a client" walkthrough |
+| v1.4 | 2026-10-07 | No new message types. When an admin deletes the song a room is playing, the server now stops the room and broadcasts a `pause` with `song_id: null`, `position_seconds: 0`, `is_playing: false` and no `sender_user_id` (before, devices already in the room kept playing a song that no longer existed while new joiners heard nothing). Clients already handle it: no song means stop |
 
 ## Connection
 
@@ -42,6 +43,8 @@ Server → client (playback broadcast, sent to **every** socket in the room incl
 ```
 
 The broadcast payload is the room state **as persisted** (position clamped to the song length), not an echo of the client payload. `server_ts` is epoch milliseconds on the **server** clock.
+
+A playback broadcast with `sender_user_id: null` comes from the server itself, not a controller. Today that happens only when an admin deletes the song the room is playing: the room is stopped and everyone gets `{ "type": "pause", "payload": { "song_id": null, "position_seconds": 0, "is_playing": false } }`. `song_id: null` means "no song": stop playback and show an empty player until the controller picks a song.
 
 ### Clock sync (`time_sync`)
 
@@ -156,7 +159,7 @@ BE → RT interface:
 
 - RT authorizes sockets via `room_service.get_active_room_or_404` + `room_repo.get_participant`.
 - RT writes playback state only through `room_service.apply_playback_event`; it never writes tables directly. `room_service.playback_payload` builds the broadcast payload.
-- BE calls RT through `app/realtime/sync_facade.py` (`connect`, `disconnect`, `broadcast`, `validate_controller`, `remove_user`, `close_room`) after REST transfer-access and leave.
+- BE calls RT through `app/realtime/sync_facade.py` (`connect`, `disconnect`, `broadcast`, `validate_controller`, `remove_user`, `close_room`, `resync_playback`) after REST transfer-access, leave and admin song delete.
 
 ## Implementing a client
 
@@ -167,7 +170,7 @@ Steps for any client (web, mobile, script). The reference implementations are `f
 3. **Connect** to `ws://<api-host>/rooms/{id}/ws?token=<access_token>` (`wss://` behind HTTPS).
 4. **Sync the clock.** On open, send 5 `time_sync` messages 200 ms apart, then one every 30 s. Keep the offset from the reply with the lowest round trip (formula under "Clock sync"). Send `time_sync` again after every reconnect.
 5. **On `room_state`**, store the whole room: participants, `controller_user_id`, `online_user_ids` and the timeline (see "Room timeline"). Fetch the song with `GET /songs/{current_song_id}`, play its `audio_url` (served from the API host) from `expected_position`, and pause if `is_playing` is false.
-6. **On `play` / `pause` / `seek` / `song_change`**, replace the timeline with the message (guarantee 4). If `song_id` changed, load the new song. Then seek and play or pause to `expected_position`, following the drift-correction table.
+6. **On `play` / `pause` / `seek` / `song_change`**, replace the timeline with the message (guarantee 4). If `song_id` changed, load the new song; if it is `null`, stop playback and wait for the next song. Then seek and play or pause to `expected_position`, following the drift-correction table.
 7. **If you are the controller** (`controller_user_id` equals your user id), send `{ "type": "seek", "payload": { "position_seconds": 42.5 } }` and similar. `song_change` also needs `song_id`. Treat your own echo as the confirmation. Everyone else must not send playback events: they get `NOT_ROOM_CONTROLLER`.
 8. **Presence and control:**
    - `user_joined` / `user_left`: update the online list.
@@ -220,3 +223,4 @@ ws.onclose = ({ code }) => {
 | BE | Eshwar (saladieshwar) | 2026-10-03 |
 | FE | Eshwar (saladieshwar) | 2026-10-03 |
 | RT / BE / FE (v1.3) | Eshwar (saladieshwar) | 2026-10-07 |
+| RT / BE / FE (v1.4) | Eshwar (saladieshwar) | 2026-10-07 |

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
 from app.models import Song
-from app.repositories import song_repo
+from app.repositories import room_repo, song_repo
 
 # Files are served by extension (StaticFiles), so the allow-list is what keeps an upload from
 # being served as HTML/JS/SVG on the API origin.
@@ -116,10 +116,12 @@ def _media_path(url: str | None) -> Path | None:
     return path if path.is_relative_to(root) and path != root else None
 
 
-def delete_song(db: Session, song: Song) -> None:
-    """Deletes the song (likes/plays cascade; rooms playing it get no current song) and removes its
-    media files unless another song still uses them (seed songs share album covers)."""
+def delete_song(db: Session, song: Song) -> list[str]:
+    """Deletes the song (likes/plays cascade) and removes its media files unless another song still
+    uses them (seed songs share album covers). Active rooms playing it are stopped with no current
+    song in the same transaction; returns their IDs so RT can tell the connected clients."""
     urls = [u for u in (song.audio_url, song.cover_url) if u]
+    stopped_rooms = room_repo.stop_rooms_playing(db, song.id)
     song_repo.delete(db, song)
     for url in urls:
         still_used = db.scalar(
@@ -128,3 +130,4 @@ def delete_song(db: Session, song: Song) -> None:
         path = _media_path(url)
         if path is not None and still_used is None:
             path.unlink(missing_ok=True)
+    return stopped_rooms
