@@ -51,7 +51,7 @@ Backend (`backend/`):
 | `app/repositories/` | All SQL, one module per aggregate |
 | `app/models/`, `app/schemas/` | SQLAlchemy tables and Pydantic request/response shapes |
 | `app/realtime/` | `ws_routes.py` (socket endpoint), `events.py` (message types), `sync_facade.py` (what REST code may call), `connection_manager.py` (hub and locks) |
-| `alembic/versions/` | Migrations `0001` to `0005` |
+| `alembic/versions/` | Migrations `0001` to `0006` |
 | `scripts/` | Seed, checks, backup restore, benchmarks, browser checks, release packaging |
 | `tests/` | `pytest` suite; `live.py` starts a real server for WebSocket tests |
 | `docs/` | Everything listed in [`documentation_checklist.md`](documentation_checklist.md) |

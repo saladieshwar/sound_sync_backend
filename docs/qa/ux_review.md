@@ -68,6 +68,17 @@ All 33 screenshots: [`ux/`](ux/) (`{screen}-{phone|tablet|desktop}.jpg`).
 - A phone browser may block audio until the first tap; the room shows **Tap to hear the room**.
 - `npm run lint` reports 4 warnings (React fast-refresh and compiler hints), no errors.
 
+## Update 2026-10-08: profile and song editing
+
+`ux_check` now also opens the admin **Edit song** dialog and fills in and saves the **Your profile** page, so it covers 13 screens (39 checks). Result: `39/39 screen x viewport checks passed.`
+
+| Screen | Phone | Tablet | Desktop | What was confirmed by eye |
+| --- | --- | --- | --- | --- |
+| Admin: Edit song | Pass | Pass | Pass | Bottom sheet on phones, centred dialog on larger screens; covers the whole screen including the footer player; current cover with change / remove |
+| Profile | Pass | Pass | Pass | Photo card and details form side by side on desktop, stacked on phone; saved message shown; email read-only |
+
+Screenshots: [`admin-edit-song-phone.jpg`](ux/admin-edit-song-phone.jpg), [`profile-desktop.jpg`](ux/profile-desktop.jpg) and the rest in [`ux/`](ux/).
+
 ## Sign-off
 
 | Lead | Team | Signed | Date | Notes |

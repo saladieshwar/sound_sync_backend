@@ -41,6 +41,7 @@ def test_song_shape(client, catalog):
         "title": "Rise Up",
         "artist": "Peak Drive",
         "album": "Unstoppable",
+        "music_director": None,
         "category": "motivation",
         "duration_seconds": 187,
         "audio_url": song.audio_url,

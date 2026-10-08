@@ -66,7 +66,7 @@ Run everything from `backend/`.
    | `http://localhost:8000/health` | `{"status": "ok"}` |
    | `http://localhost:8000/ready` | `{"status": "ready", "database": "up"}` |
    | `http://localhost:8000/docs` | Swagger UI with auth, songs, library, rooms, admin |
-   | `alembic current` | `0005 (head)` |
+   | `alembic current` | `0006 (head)` |
    | `python -m scripts.check_db` | every line `OK` |
    | `pytest` | all tests pass |
 
@@ -79,8 +79,7 @@ npm ci
 npm run dev        # http://localhost:5173
 ```
 
-Open `http://localhost:5173`, register or log in with a seed account (`alice@soundsync.dev` / `alice12345`; admin: `admin@soundsync.dev` / `admin12345`). The login screen shows **API online** when the backend is reachable.
-
+Open `http://localhost:5173`, register or log in with a seed account (`alice@soundsync.dev` / `alice12345`; admin: `admin@soundsync.dev` / `admin12345`).
 Other commands: `npm test` (unit + journey tests), `npm run lint`, `npm run build` (production files in `dist/`). Screens and how the frontend talks to the API: [`../../frontend/docs/ui_guide.md`](../../frontend/docs/ui_guide.md).
 
 ## 5. Configuration reference
@@ -103,7 +102,7 @@ Read by `app/core/config.py`. Every setting has a default; `.env` overrides it.
 | `MEDIA_ROOT` | `./media` | Folder for audio and cover files (seed + admin uploads) | To store media elsewhere; back it up with the database |
 | `MEDIA_URL_PREFIX` | `/media` | URL path media is served from | Rarely; stored song URLs use it |
 | `MAX_AUDIO_UPLOAD_BYTES` | `52428800` (50 MB) | Admin audio upload limit (`413 FILE_TOO_LARGE` above it) | To allow larger/smaller files |
-| `MAX_COVER_UPLOAD_BYTES` | `5242880` (5 MB) | Admin cover upload limit | Same |
+| `MAX_COVER_UPLOAD_BYTES` | `5242880` (5 MB) | Image upload limit: admin song covers and profile pictures | Same |
 
 Test and tool settings (environment variables, not in `.env`):
 
@@ -148,9 +147,10 @@ Endpoints at a glance:
 | Health | Public | `GET /health`, `GET /ready` |
 | Auth | Public; `/auth/me` needs a token | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
 | Catalog | Public | `GET /songs`, `/songs/search?q=`, `/songs/categories`, `/songs/category/{name}`, `/songs/albums`, `/songs/album/{name}`, `/songs/{id}`; media files under `/media/…` |
+| Profile | Login token | `PATCH /users/me`, `PUT`/`DELETE /users/me/avatar` |
 | Library | Login token | `GET /users/me/liked-songs`, `POST`/`DELETE /users/me/liked-songs/{song_id}`, `GET /users/me/recently-played`, `POST /users/me/recently-played/{song_id}` |
 | Rooms | Login token | `POST /rooms`, `GET /rooms/{id}`, `POST /rooms/{id}/join`, `POST /rooms/{id}/leave`, `POST /rooms/{id}/transfer-access`; WebSocket `/rooms/{id}/ws?token=` |
-| Admin | Admin token | `POST /admin/songs`, `DELETE /admin/songs/{id}`, `GET /admin/users`, `GET /admin/rooms` |
+| Admin | Admin token | `POST /admin/songs`, `PATCH /admin/songs/{id}`, `PUT`/`DELETE /admin/songs/{id}/cover`, `DELETE /admin/songs/{id}`, `GET /admin/users`, `GET /admin/rooms` |
 
 ## 8. Troubleshooting
 

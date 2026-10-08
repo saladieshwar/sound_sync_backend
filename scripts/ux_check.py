@@ -1,7 +1,7 @@
 """Phase 8 FE: UI/UX check of every main screen at phone, tablet and desktop size (headless Edge).
 
 One user registers, is promoted to admin, plays a song, opens a Musical Room with a song playing,
-and opens each Admin tab. Every screen is checked at each viewport for:
+opens each Admin tab and the Edit song dialog, then fills in and saves their profile. Every screen is checked at each viewport for:
 
 * no horizontal overflow: nothing sticks out past the right edge (wide tables must scroll inside
   their own box), so the page never scrolls sideways on a phone;
@@ -207,6 +207,21 @@ def main() -> int:
                 label=screen,
             )
             capture(device, screen, results, {"admin-users": MASK_PEOPLE, "admin-rooms": MASK_ROOMS}.get(screen, ""))
+
+        device.click('[role="tab"]:nth-child(2)')
+        device.click('[aria-label^="Edit "]')
+        device.wait("document.querySelector('[role=\"dialog\"]')", label="edit song dialog")
+        capture(device, "admin-edit-song", results)
+        device.eval("dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+        device.wait("!document.querySelector('[role=\"dialog\"]')", label="edit song dialog closed")
+
+        device.click('a[href="/profile"]')
+        device.wait("document.querySelector('[data-testid=\"profile-full-name\"]')", label="profile page")
+        device.fill("profile-full-name", "UX Check")
+        device.fill("profile-phone", "+91 98765 43210")
+        device.click('[data-testid="profile-save"]')
+        device.wait("document.body.textContent.includes('Profile saved')", label="profile saved")
+        capture(device, "profile", results)
     finally:
         browser.close()
         if emails:

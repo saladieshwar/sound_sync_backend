@@ -20,5 +20,12 @@ def create(db: Session, *, username: str, email: str, password_hash: str) -> Use
     return user
 
 
+def save(db: Session, user: User) -> User:
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def list_all(db: Session, *, skip: int = 0, limit: int = 100) -> list[User]:
     return list(db.scalars(select(User).order_by(User.id).offset(skip).limit(limit)))

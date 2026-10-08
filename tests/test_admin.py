@@ -79,6 +79,20 @@ def test_upload_creates_searchable_song_with_served_files(client, admin_headers,
     assert song["id"] in [s["id"] for s in found]
 
 
+def test_upload_saves_the_music_director(client, admin_headers, media_files):
+    response = upload(client, admin_headers, media_files, fields={"music_director": "  A. R. Rahman  "})
+    assert response.status_code == 201, response.text
+    song = response.json()
+    assert song["music_director"] == "A. R. Rahman"
+    assert client.get(f"/songs/{song['id']}").json()["music_director"] == "A. R. Rahman"
+
+
+def test_upload_without_music_director_leaves_it_empty(client, admin_headers, media_files):
+    response = upload(client, admin_headers, media_files, fields={"music_director": "   "})
+    assert response.status_code == 201, response.text
+    assert response.json()["music_director"] is None
+
+
 def test_upload_without_cover_or_album(client, admin_headers, media_files):
     response = upload(
         client, admin_headers, media_files, fields={"album": "  "}, audio=("track.MP3", b"ID3data")
@@ -136,9 +150,133 @@ def test_upload_validates_metadata(client, admin_headers, media_files, fields):
 # --- ADM-02 access ------------------------------------------------------------------
 
 
+# --- Edit song details --------------------------------------------------------------
+
+
+def edit(client, headers, song_id, body):
+    return client.patch(f"/admin/songs/{song_id}", json=body, headers=headers)
+
+
+def put_cover(client, headers, media_files, song_id, cover):
+    before = set((Path(settings.MEDIA_ROOT) / "covers").glob("*"))
+    files = {"cover_file": (cover[0], io.BytesIO(cover[1]), "image/png")}
+    response = client.put(f"/admin/songs/{song_id}/cover", files=files, headers=headers)
+    media_files.extend(set((Path(settings.MEDIA_ROOT) / "covers").glob("*")) - before)
+    return response
+
+
+def test_edit_changes_only_the_fields_sent(client, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files, fields={"music_director": "Old MD"}).json()
+    response = edit(
+        client, admin_headers, song["id"],
+        {"title": "  New Title ", "music_director": "Ilaiyaraaja", "duration_seconds": 99},
+    )
+    assert response.status_code == 200, response.text
+    edited = response.json()
+    assert edited["title"] == "New Title"
+    assert edited["music_director"] == "Ilaiyaraaja"
+    assert edited["duration_seconds"] == 99
+    for unchanged in ("artist", "album", "category", "audio_url", "cover_url"):
+        assert edited[unchanged] == song[unchanged]
+    assert client.get(f"/songs/{song['id']}").json() == edited
+    found = client.get("/songs/search", params={"q": "new title"}).json()
+    assert song["id"] in [s["id"] for s in found]
+
+
+def test_edit_blank_album_or_music_director_clears_them(client, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files, fields={"music_director": "MD"}).json()
+    edited = edit(client, admin_headers, song["id"], {"album": " ", "music_director": ""}).json()
+    assert edited["album"] is None
+    assert edited["music_director"] is None
+    assert edit(client, admin_headers, song["id"], {"music_director": None}).json()["music_director"] is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"title": "  "},
+        {"title": None},
+        {"artist": ""},
+        {"category": ""},
+        {"duration_seconds": -5},
+        {"duration_seconds": None},
+        {"music_director": "x" * 201},
+        {"audio_url": "/media/audio/other.wav"},
+    ],
+)
+def test_edit_validates_and_changes_nothing(client, admin_headers, media_files, body):
+    song = upload(client, admin_headers, media_files).json()
+    response = edit(client, admin_headers, song["id"], body)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert client.get(f"/songs/{song['id']}").json() == song
+
+
+def test_edit_replaces_the_cover_and_deletes_the_old_file(client, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files, cover=("old.png", PNG_BYTES)).json()
+    response = put_cover(client, admin_headers, media_files, song["id"], ("new.webp", PNG_BYTES))
+    assert response.status_code == 200, response.text
+    new_url = response.json()["cover_url"]
+    assert new_url != song["cover_url"] and new_url.endswith(".webp")
+    assert media_path(new_url).is_file()
+    assert not media_path(song["cover_url"]).exists()
+
+
+def test_edit_adds_a_cover_to_a_song_without_one(client, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files).json()
+    response = put_cover(client, admin_headers, media_files, song["id"], ("c.png", PNG_BYTES))
+    assert response.status_code == 200, response.text
+    assert media_path(response.json()["cover_url"]).is_file()
+
+
+def test_edit_remove_cover_keeps_a_cover_other_songs_still_use(client, db, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files, cover=("c.png", PNG_BYTES)).json()
+    db.add(Song(title="Twin", artist="QA", category="test", duration_seconds=1,
+                audio_url="/media/audio/elsewhere.wav", cover_url=song["cover_url"]))
+    db.flush()
+    response = client.delete(f"/admin/songs/{song['id']}/cover", headers=admin_headers)
+    assert response.status_code == 200
+    assert response.json()["cover_url"] is None
+    assert media_path(song["cover_url"]).exists()  # still the twin's cover
+
+
+def test_edit_remove_cover_deletes_an_unused_file(client, admin_headers, media_files):
+    song = upload(client, admin_headers, media_files, cover=("c.png", PNG_BYTES)).json()
+    assert client.delete(f"/admin/songs/{song['id']}/cover", headers=admin_headers).json()["cover_url"] is None
+    assert not media_path(song["cover_url"]).exists()
+
+
+@pytest.mark.parametrize(
+    ("cover", "status"),
+    [(("evil.svg", b"<svg onload=alert(1)>"), 415), (("page.html", b"<p>"), 415), (("empty.png", b""), 422)],
+)
+def test_edit_rejects_a_bad_cover_and_keeps_the_old_one(client, admin_headers, media_files, cover, status):
+    song = upload(client, admin_headers, media_files, cover=("c.png", PNG_BYTES)).json()
+    response = put_cover(client, admin_headers, media_files, song["id"], cover)
+    assert response.status_code == status
+    assert len(media_files) == 2  # only the audio and cover from upload(); nothing new left on disk
+    assert client.get(f"/songs/{song['id']}").json() == song
+    assert media_path(song["cover_url"]).is_file()
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("post", "/admin/songs"), ("delete", "/admin/songs/1"), ("get", "/admin/users"), ("get", "/admin/rooms")],
+    [("patch", "/admin/songs/0"), ("put", "/admin/songs/0/cover"), ("delete", "/admin/songs/0/cover")],
+)
+def test_edit_unknown_song_is_404(client, admin_headers, method, path):
+    kwargs = {"json": {"title": "X"}} if method == "patch" else {}
+    if method == "put":
+        kwargs = {"files": {"cover_file": ("c.png", io.BytesIO(PNG_BYTES), "image/png")}}
+    response = getattr(client, method)(path, headers=admin_headers, **kwargs)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "SONG_NOT_FOUND"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("post", "/admin/songs"), ("patch", "/admin/songs/1"), ("put", "/admin/songs/1/cover"),
+     ("delete", "/admin/songs/1/cover"), ("delete", "/admin/songs/1"), ("get", "/admin/users"),
+     ("get", "/admin/rooms")],
 )
 def test_admin_routes_require_admin(client, auth_headers, method, path):
     assert getattr(client, method)(path).status_code == 401
