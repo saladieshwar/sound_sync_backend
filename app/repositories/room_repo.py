@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models import MusicalRoom, RoomParticipant, RoomStatus
@@ -42,6 +44,22 @@ def add_participant(db: Session, room_id: str, user_id: int) -> RoomParticipant:
     db.commit()
     db.refresh(participant)
     return participant
+
+
+def stop_rooms_playing(db: Session, song_id: int) -> list[str]:
+    """Active rooms on `song_id` drop it and stop at 0 (not committed). Returns their IDs."""
+    stmt = (
+        update(MusicalRoom)
+        .where(MusicalRoom.current_song_id == song_id, MusicalRoom.status == RoomStatus.ACTIVE)
+        .values(
+            current_song_id=None,
+            is_playing=False,
+            position_seconds=0.0,
+            state_updated_at=datetime.now(timezone.utc),
+        )
+        .returning(MusicalRoom.id)
+    )
+    return list(db.scalars(stmt))
 
 
 def save(db: Session, room: MusicalRoom) -> MusicalRoom:

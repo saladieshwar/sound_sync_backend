@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, Query, UploadFile, status
 from pydantic import StringConstraints
 
 from app.api.deps import AdminUser, DbSession
+from app.realtime import sync_facade
 from app.repositories import room_repo, user_repo
 from app.schemas.common import ErrorResponse
 from app.schemas.room import RoomOut
@@ -56,8 +57,9 @@ def upload_song(
     status_code=status.HTTP_204_NO_CONTENT,
     responses={404: {"model": ErrorResponse}},
 )
-def delete_song(song_id: int, _: AdminUser, db: DbSession):
-    admin_service.delete_song(db, song_service.get_song_or_404(db, song_id))
+def delete_song(song_id: int, _: AdminUser, db: DbSession, tasks: BackgroundTasks):
+    for room_id in admin_service.delete_song(db, song_service.get_song_or_404(db, song_id)):
+        tasks.add_task(sync_facade.resync_playback, room_id)
 
 
 @router.get("/users", response_model=list[UserOut])

@@ -252,6 +252,26 @@ Defects found and fixed during Phase 7:
 - `/songs/categories` was missing from the error catalogue.
 - The backend repo tracked `venv/`, `.venv/` and `__pycache__` (16,000+ files); they are now untracked.
 
+## Phase 8 results — Hardening, UAT and Handover (release 1.0.0)
+
+Run 2026-10-07. Backend: `pytest` (240 passed; new `tests/test_data_integrity.py`, the playing-song delete test in `tests/test_room_sync.py`, QA-record and release-package checks in `tests/test_docs.py`). Frontend: `npm test` (189 passed), `npm run lint` (0 errors, 4 known warnings), `npm run build` OK. WebSocket contract v1.4. Section 6 sign-off: [`uat_evidence_pack.md`](uat_evidence_pack.md).
+
+| ID | Case | Expected | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| BENCH-01 | Sync latency and drift on LAN, Wi-Fi, 4G, poor network and in real browsers | All targets in `sync_tuning.md` met; report accepted by QA | Pass | [`benchmark_report.md`](benchmark_report.md) |
+| DEF-01 | Defect burn-down | No Sev-1 or Sev-2 open on core paths; every fix has evidence | Pass | [`defect_log.md`](defect_log.md) (20 closed, 0 open); `test_docs::test_defect_log_has_nothing_open_and_every_fix_has_evidence` |
+| ADM-06 | Admin deletes the song a room is playing | Every device in the room stops; new joiners see no song; play needs a new song | Pass | `test_room_sync::test_admin_deleting_the_playing_song_stops_the_room_for_everyone`; FE `RoomPage.test.jsx` |
+| UX-01 | Every screen at phone, tablet and desktop size | No sideways scroll or cut-off content, player never hides content, named controls, 24 px targets, no script errors | Pass | `python -m scripts.ux_check` 30 / 30; [`ux_review.md`](ux_review.md) |
+| UX-02 | Login and register forms with a screen reader and password manager | Fields named, autofill hints, errors announced | Pass | FE `LoginPage.test.jsx`, `RegisterPage.test.jsx` |
+| DATA-01 | Delete rules and indexes on the final schema | Database, models and checklist agree; every foreign key indexed; deletes remove exactly the right rows | Pass | `test_data_integrity::test_delete_rules_match_in_database_models_and_checklist`, `test_data_integrity::test_every_foreign_key_is_indexed_so_deletes_never_scan`; [`data_checklist.md`](data_checklist.md) |
+| DATA-02 | Backup of the final schema restores | Restore check all OK; tests pass on the copy | Pass | `python -m scripts.restore_check`; [`data_checklist.md`](data_checklist.md) |
+| UAT-01 | All handbook Section 6 criteria | 11 of 11 Pass with evidence; stakeholder accepts | Pass | [`uat_evidence_pack.md`](uat_evidence_pack.md); `test_docs::test_uat_pack_passes_every_section_6_criterion_with_evidence` |
+| KT-01 | Team can build, run and extend from the package and docs alone | Clean copy builds, runs, and accepts a new endpoint with tests | Pass | [`../handover.md`](../handover.md) "Handover verification" (241 tests after the extension) |
+| REL-01 | Source package | Only source; no virtualenv, cache, media or `.env`; checksums | Pass | `python -m scripts.package_release`; `test_docs::test_release_package_refuses_secrets_environments_and_build_output` |
+| E2E-03 | Two real browsers, full journey | All steps Pass | Pass (3 runs in a row, 30 / 30) | `python -m scripts.browser_e2e` |
+
+Regression: every Phase 1–7 case above was re-run in the same `pytest` / `npm test` run (all green).
+
 ## Review sign-off
 
 | Lead | Team | Approved | Date | Notes |
@@ -263,3 +283,5 @@ Defects found and fixed during Phase 7:
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-03 | Matrix approved as Phase 1 baseline |
 | Eshwar (saladieshwar) | QA | Yes | 2026-10-07 | Phase 6: critical E2E green, no broken sync on normal networks, all performance budgets met |
 | Eshwar (saladieshwar) | ALL | Yes | 2026-10-07 | Phase 7: documentation checklist satisfied; error suite documented and passing |
+| Eshwar (saladieshwar) | QA | Yes | 2026-10-07 | Phase 8: benchmark report accepted, no open defects, UX and DATA checklists signed, all Section 6 criteria accepted |
+| Eshwar (saladieshwar) | ALL | Yes | 2026-10-07 | Phase 8: handover complete; release 1.0.0 delivered |

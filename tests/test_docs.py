@@ -1,10 +1,12 @@
-"""Phase 7 documentation pack: the docs must stay true to the code.
+"""Phase 7 documentation pack and Phase 8 QA records: the docs must stay true to the code.
 
 Fails when an error code, event, setting, route, script, test name or link in the docs no longer
-matches the code. Frontend checks need the frontend repo cloned next to this one (skipped otherwise).
+matches the code, or when the defect log or UAT pack shows anything open or unproven. Frontend
+checks need the frontend repo cloned next to this one (skipped otherwise).
 """
 
 import ast
+import functools
 import json
 import re
 from pathlib import Path
@@ -15,6 +17,7 @@ from app.core.config import Settings
 from app.core.errors import ErrorCode
 from app.main import app
 from app.realtime.events import WS_ERROR_CODES, EventType
+from scripts.package_release import forbidden
 
 BACKEND = Path(__file__).resolve().parent.parent
 DOCS = BACKEND / "docs"
@@ -54,6 +57,7 @@ def _markdown_files() -> list[Path]:
     return files
 
 
+@functools.cache
 def _test_names() -> set[str]:
     names = set()
     for path in (BACKEND / "tests").glob("test_*.py"):
@@ -153,3 +157,68 @@ def test_every_frontend_api_function_is_in_the_ui_guide():
             continue
         for name in re.findall(r"^export const (\w+)", _read(module), re.MULTILINE):
             assert f"`{name}`" in guide, f"{module.name}: {name}"
+
+
+# --- Phase 8 QA records ---------------------------------------------------------------
+
+TEST_REF = r"`(test_\w+::test_\w+)`"
+
+
+def _table_rows(text: str, first_cell: str) -> list[list[str]]:
+    rows = re.findall(rf"^\| {first_cell} \|.*\|$", text, re.MULTILINE)
+    return [[cell.strip() for cell in row.strip("|").split(" | ")] for row in rows]
+
+
+def _evidence_exists(evidence: str) -> list[str]:
+    """Each piece of evidence named in `evidence` that exists (tests, scripts, screenshots, FE tests)."""
+    found = [ref for ref in re.findall(TEST_REF, evidence) if ref in _test_names()]
+    found += [m for m in re.findall(r"python -m (scripts\.\w+)", evidence) if (BACKEND / f"{m.replace('.', '/')}.py").is_file()]
+    found += [p for p in re.findall(r"`(docs/qa/ux/[\w-]+\.jpg)`", evidence) if (BACKEND / p).is_file()]
+    if FRONTEND.is_dir():
+        found += [f for f in re.findall(r"`(\w+\.test\.jsx?)`", evidence) if any((FRONTEND / "src").rglob(f))]
+    return found
+
+
+def test_qa_docs_name_only_existing_tests():
+    existing = _test_names()
+    for path in [*(DOCS / "qa").glob("*.md"), DOCS / "handover.md"]:
+        for ref in re.findall(TEST_REF, _read(path)):
+            assert ref in existing, f"{path.name} names a test that does not exist: {ref}"
+
+
+def test_defect_log_has_nothing_open_and_every_fix_has_evidence():
+    log = _read(DOCS / "qa" / "defect_log.md")
+    defects = _table_rows(log, r"D-\d+")
+    assert defects, "no defects parsed"
+    assert len({row[0] for row in defects}) == len(defects), "duplicate defect ID"
+    for row in defects:
+        assert row[-1] == "Closed", f"{row[0]} is {row[-1]}"
+        assert _evidence_exists(row[-2]), f"{row[0]}: evidence names nothing that exists: {row[-2]}"
+
+    per_severity = [sum(row[1] == f"Sev-{n}" for row in defects) for n in range(1, 5)]
+    for label, expected in (("Found", per_severity), ("Closed", per_severity), (r"\*\*Open\*\*", [0] * 4)):
+        (cells,) = _table_rows(log, label)
+        counts = [int(c.strip("*")) for c in cells[1:]]
+        assert counts == [*expected, sum(expected)], f"status row {label}: {counts}"
+
+
+def test_uat_pack_passes_every_section_6_criterion_with_evidence():
+    criteria = _table_rows(_read(DOCS / "qa" / "uat_evidence_pack.md"), r"C-\d\d")
+    assert [row[0] for row in criteria] == [f"C-{n:02}" for n in range(1, 12)]
+    for row in criteria:
+        assert row[-1] == "Pass", f"{row[0]} is {row[-1]}"
+        assert re.findall(TEST_REF, row[3]), f"{row[0]} names no automated test"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [".env", "app/.env.production", "venv/Lib/site.py", ".venv/x", "app/__pycache__/main.cpython-313.pyc",
+     "node_modules/react/index.js", "media/audio/a.wav", "backups/db.dump", "dist/index.html", "app/x.pyc"],
+)
+def test_release_package_refuses_secrets_environments_and_build_output(name):
+    assert forbidden(name)
+
+
+def test_release_package_keeps_source_and_the_env_example():
+    for name in (".env.example", "app/main.py", "src/App.jsx", "docs/qa/ux/home-phone.jpg", "package-lock.json"):
+        assert forbidden(name) is None, name

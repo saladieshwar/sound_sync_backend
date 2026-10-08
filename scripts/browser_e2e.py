@@ -24,6 +24,7 @@ import tempfile
 import time
 import uuid
 import wave
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import delete, update
@@ -393,7 +394,9 @@ def main() -> None:
         )
 
         link = alice.eval("document.querySelector('[data-testid=\"room-join-link\"]').value")
-        bob.goto(link.replace(room_id, room_id.lower()))
+        check("join link ends with the Room ID", link.endswith(f"/room/{room_id}"), link)
+        # FRONTEND_BASE_URL may be a LAN address for phones; Bob's login lives on this script's origin.
+        bob.goto(f"{app}{urlsplit(link).path.replace(room_id, room_id.lower())}")
         bob.click('[data-testid="room-join-confirm"]')
         bob.wait("document.querySelector('[data-testid=\"socket-status\"]')?.textContent === 'Live'")
         alice.wait(f"document.querySelector('[data-testid=\"participant-{bob_id}\"]')")

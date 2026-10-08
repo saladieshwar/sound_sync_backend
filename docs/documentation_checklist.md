@@ -1,6 +1,6 @@
 # Documentation Pack & Checklist (ALL)
 
-The complete SoundSync documentation and the Phase 7 checklist. Every item links to its document and says how it was checked. Paths are relative to the two repositories cloned side by side (`backend/`, `frontend/`).
+The complete SoundSync documentation and the Phase 7 and Phase 8 checklists. Every item links to its document and says how it was checked. Paths are relative to the two repositories cloned side by side (`backend/`, `frontend/`).
 
 ## Where to start
 
@@ -12,7 +12,8 @@ The complete SoundSync documentation and the Phase 7 checklist. Every item links
 | Work on the API | [`../README.md`](../README.md), OpenAPI at `/docs`, [`error_catalogue.md`](error_catalogue.md) |
 | Write a room client / change room sync | [`websocket_contract.md`](websocket_contract.md), [`sync_tuning.md`](sync_tuning.md) |
 | Set up, back up or restore the database | [`db_runbook.md`](db_runbook.md), [`schema.md`](schema.md) |
-| Test or accept a release | [`qa/acceptance_matrix.md`](qa/acceptance_matrix.md), [`qa/error_crosscheck.md`](qa/error_crosscheck.md) |
+| Test or accept a release | [`qa/acceptance_matrix.md`](qa/acceptance_matrix.md), [`qa/error_crosscheck.md`](qa/error_crosscheck.md), [`qa/uat_evidence_pack.md`](qa/uat_evidence_pack.md) |
+| Take over the project (architecture, how to extend, release package) | [`handover.md`](handover.md) |
 
 ## Document index
 
@@ -30,6 +31,12 @@ The complete SoundSync documentation and the Phase 7 checklist. Every item links
 | [`../README.md`](../README.md) | BE | Backend overview, contracts, tests and scripts |
 | [`qa/error_crosscheck.md`](qa/error_crosscheck.md) | QA | Every error: documented, tested, handled in the UI |
 | [`qa/acceptance_matrix.md`](qa/acceptance_matrix.md) | QA | Acceptance cases and results for every phase |
+| [`qa/benchmark_report.md`](qa/benchmark_report.md) | RT | Release 1.0.0 sync latency and drift benchmarks, rerunnable harness, QA acceptance |
+| [`qa/defect_log.md`](qa/defect_log.md) | QA | Every defect with severity, fix, evidence and status; burn-down |
+| [`qa/data_checklist.md`](qa/data_checklist.md) | DATA | Delete rules per foreign key, final schema checks, backup and restore check |
+| [`qa/ux_review.md`](qa/ux_review.md) | FE | Screen checks at phone, tablet and desktop size, screenshots, UX sign-off for UAT |
+| [`qa/uat_evidence_pack.md`](qa/uat_evidence_pack.md) | QA | Evidence for each handbook Section 6 criterion; stakeholder acceptance |
+| [`handover.md`](handover.md) | ALL | Walkthrough notes: architecture, flows, how to extend, operations, KT sessions, final source package |
 
 ## Phase 7 checklist
 
@@ -57,6 +64,17 @@ Clean-copy check of "a clean machine can build and run from the docs":
    - `fastapi run app/main.py` answered `/health`, `/ready` and `/docs` with 200.
 3. **Frontend**, following section 4: `npm ci`, then `npm test` (186 passed), `npm run lint` and `npm run build` all succeeded.
 4. The copy (including its `.env`) was deleted afterwards.
+
+## Phase 8 checklist (release 1.0.0)
+
+| # | Handbook item | Deliverable | Done when (handbook) | Evidence | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | RT: Sync latency/drift benchmark report | Benchmark report + rerunnable harness | Report accepted by QA | [`qa/benchmark_report.md`](qa/benchmark_report.md): all targets met on 4 network profiles and in 3 real-browser runs; harness commands listed; QA acceptance row | Done |
+| 2 | BE: Defect burn-down on API/orchestration | Critical/high defects closed | No Sev-1 open on core paths | [`qa/defect_log.md`](qa/defect_log.md): 20 found, 20 closed, 0 open; new fix: deleting a playing song stops the room (contract v1.4); `test_defect_log_has_nothing_open_and_every_fix_has_evidence` | Done |
+| 3 | FE: UI/UX defect burn-down | Player, room, and admin UX clearly functional | UX signed off for UAT | [`qa/ux_review.md`](qa/ux_review.md): `ux_check` 30 of 30 at phone, tablet and desktop size; accessibility and tap-size fixes; FE and QA sign-off | Done |
+| 4 | DATA: Final schema/store verification | Cascade deletes + backup check | DATA checklist signed | [`qa/data_checklist.md`](qa/data_checklist.md): 9 delete rules proven in `tests/test_data_integrity.py`; restore check on the final schema; DATA and QA sign-off | Done |
+| 5 | QA: Full acceptance + UAT sign-off | Evidence pack against Section 6 criteria | Stakeholder accepts delivery | [`qa/uat_evidence_pack.md`](qa/uat_evidence_pack.md): 11 of 11 criteria Pass with tests and browser evidence; stakeholder acceptance row; `test_uat_pack_passes_every_section_6_criterion_with_evidence` | Done |
+| 6 | ALL: Knowledge transfer & handover | Walkthrough notes + final source package | Internal team can build/run/extend independently | [`handover.md`](handover.md) (architecture, flows, extension recipes, KT sessions, handover verification); `python -m scripts.package_release` builds the source package with checksums | Done |
 
 ## Keeping the pack true
 

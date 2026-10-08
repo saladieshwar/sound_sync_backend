@@ -72,6 +72,8 @@ FastAPI service covering three handbook stacks:
 | Database runbook (init, seed, backup, restore) | DATA, QA | `docs/db_runbook.md` |
 | Error-handling cross-check | QA | `docs/qa/error_crosscheck.md` |
 | Acceptance matrix | All | `docs/qa/acceptance_matrix.md` |
+| Release 1.0.0 QA records (benchmarks, defects, data checklist, UX review, UAT pack) | All | `docs/qa/` |
+| Handover walkthrough (architecture, how to extend, release package) | All | `docs/handover.md` |
 
 Regenerate the OpenAPI snapshot after changing endpoints:
 
@@ -125,6 +127,19 @@ Phase 7 (documentation):
 - `tests/test_docs.py` — the docs match the code: OpenAPI snapshot, every error code, WebSocket event, setting, script, link, frontend route and API function is documented; every test named in `docs/qa/error_crosscheck.md` exists.
 - `tests/test_check_db.py` — `scripts/check_db.py` passes on a seeded database and catches missing or changed seed rows.
 - `python -m scripts.restore_check <empty database name or URL>` — full backup and restore, compared table by table with the source (see `docs/db_runbook.md` section 8).
+
+Phase 8 (hardening, UAT and handover; release 1.0.0):
+
+- `tests/test_data_integrity.py` — every foreign key's delete rule matches in the database, the models and `docs/qa/data_checklist.md`; every foreign key is indexed; deleting a user, song or room removes exactly the right rows.
+- `tests/test_room_sync.py` — deleting the song a room is playing stops the room for every device (contract v1.4).
+- `tests/test_docs.py` — also checks the QA records: no open defect, every fix and Section 6 criterion has evidence that exists.
+
+```powershell
+python -m scripts.ux_check http://localhost:5173    # FE: every screen at phone/tablet/desktop size; screenshots to docs/qa/ux/
+python -m scripts.package_release                   # ALL: source package + SHA256SUMS in dist/ (add a tag, e.g. v1.0.0, to pack it)
+```
+
+Results and sign-offs: `docs/qa/benchmark_report.md`, `defect_log.md`, `data_checklist.md`, `ux_review.md`, `uat_evidence_pack.md`; walkthrough notes: `docs/handover.md`.
 
 ## Multi-device room testing (same Wi-Fi)
 

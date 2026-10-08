@@ -203,6 +203,8 @@ pg_ctl -D $data -m fast -w stop; Remove-Item $data -Recurse -Force
 | Full backend test suite (`pytest`) on the restored copy | 220 passed |
 | Reset path (section 5) on that server | `alembic downgrade base`, `upgrade head`, `seed`, `check_db` all OK, `alembic check` no drift |
 
+**Re-verified for release 1.0.0 (Phase 8)** on the final schema with the same steps: restore check PASS, then the full `pytest` on the restored copy. Results, delete rules per foreign key and the DATA sign-off: [`qa/data_checklist.md`](qa/data_checklist.md).
+
 ## 9. Quick reference
 
 | Goal | Command |
