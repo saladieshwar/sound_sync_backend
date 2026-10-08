@@ -129,6 +129,17 @@ Vite bakes these in at build time: set them **before** `npm run build`. The dev 
 - Keep `MEDIA_ROOT` on persistent storage and include it in backups ([`db_runbook.md`](db_runbook.md)).
 - Logs never contain passwords or JWTs (room socket URLs are written as `token=[redacted]`).
 
+### Hosted: MusicPartner (Render + Vercel)
+
+The public site is the frontend on Vercel (project `musicpartner`, `https://musicpartner.vercel.app`) talking to the API on Render. Vercel cannot run the API: it has no WebSockets, no long-running process and no disk.
+
+1. **API and database (Render).** On render.com: **New → Blueprint**, pick the backend repository and apply. [`render.yaml`](../render.yaml) creates the `musicpartner-api` web service and the `musicpartner-db` PostgreSQL database, generates `JWT_SECRET_KEY`, and on every start runs `alembic upgrade head`, `python -m scripts.seed --catalog-only` (demo songs, no seed accounts) and uvicorn. A `postgres://` / `postgresql://` `DATABASE_URL` is switched to the psycopg driver automatically.
+2. **Frontend (Vercel).** On vercel.com: **Add New → Project**, import the frontend repository, name it `musicpartner`, add `VITE_API_BASE_URL` = the Render service URL (e.g. `https://musicpartner-api.onrender.com`) and deploy. [`vercel.json`](../../frontend/vercel.json) sends every route to `index.html`. `VITE_WS_BASE_URL` is derived (`https` → `wss`).
+3. If Vercel gives a different address, set `CORS_ORIGINS` and `FRONTEND_BASE_URL` on Render to it.
+4. **First admin.** Register on the site, then from `backend/` run, with the database's **External Database URL** from Render: `$env:DATABASE_URL = "<external URL>"; python -m scripts.make_admin you@example.com`. Close that terminal afterwards so the URL is not reused.
+
+Free-plan limits: the API sleeps after 15 minutes without traffic (the first request then takes about a minute), the disk is wiped on every restart or deploy (songs and pictures uploaded by the admin are lost; the demo catalog is regenerated), and the free database expires after 30 days. A paid instance with a persistent disk mounted at `MEDIA_ROOT` removes the first two.
+
 ## 7. API reference
 
 | What | Where |
