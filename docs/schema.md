@@ -1,6 +1,6 @@
 # Schema Note (DATA → BE)
 
-Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0005`.
+Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0006`.
 
 | Migration | Change |
 | --- | --- |
@@ -9,11 +9,12 @@ Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migr
 | `0003` | Catalog/library indexes: `pg_trgm` extension; GIN trigram indexes `ix_songs_{title,artist,album}_trgm` (substring search); `ix_songs_category_lower` on `lower(category)` (category filter); `ix_liked_songs_user_liked_at`, `ix_liked_songs_song_id`, `ix_recently_played_song_id`. `liked_at` / `played_at` default to `clock_timestamp()` so rows written in one transaction keep their real order |
 | `0004` | `recently_played`: replaces `ix_recently_played_user_played_at` with `ix_recently_played_user_played_at_id` (`user_id`, `played_at DESC`, `id DESC`), matching the history query's `ORDER BY` so the page is read straight off the index with no sort step |
 | `0005` | `songs`: stored generated column `search_text` = `lower(title ‖ chr(31) ‖ artist ‖ chr(31) ‖ coalesce(album, ''))` with one GIN trigram index `ix_songs_search_trgm`, replacing the three per-column trigram indexes. `musical_rooms`: indexes on `admin_user_id`, `controller_user_id`, `current_song_id` (deleting a user/song no longer scans every room) and partial `ix_musical_rooms_active_created_at` (`created_at DESC` where `status = 'active'`, the admin room list); `created_at` defaults to `clock_timestamp()` |
+| `0006` | `songs`: nullable `music_director` (≤ 200). `users`: nullable profile details `full_name` (≤ 100), `phone` (≤ 20), `bio` (≤ 300), `avatar_url` (≤ 500, a `/media/avatars/…` file). Adding nullable columns rewrites no rows; downgrade drops them |
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `users` | `id`, `username`, `email` (unique, lower-case), `password_hash`, `is_admin`, `created_at` | DB rejects duplicate emails, non-lower-case emails, and any `password_hash` that is not a bcrypt hash |
-| `songs` | `id`, `title`, `artist`, `album`, `category`, `duration_seconds`, `audio_url`, `cover_url`, `search_text` (generated, not in the API) | B-tree indexes on title/artist/album/category; trigram index on `search_text` for search; `lower(category)` index |
+| `users` | `id`, `username`, `email` (unique, lower-case), `password_hash`, `is_admin`, `full_name`, `phone`, `bio`, `avatar_url`, `created_at` | DB rejects duplicate emails, non-lower-case emails, and any `password_hash` that is not a bcrypt hash. Profile fields are edited by the user (`PATCH /users/me`, `PUT`/`DELETE /users/me/avatar`) |
+| `songs` | `id`, `title`, `artist`, `album`, `music_director`, `category`, `duration_seconds`, `audio_url`, `cover_url`, `search_text` (generated, not in the API) | B-tree indexes on title/artist/album/category; trigram index on `search_text` for search; `lower(category)` index |
 | `liked_songs` | PK (`user_id`, `song_id`), `liked_at` | index (`user_id`, `liked_at`) for "newest first"; index `song_id`; cascades on user/song delete |
 | `recently_played` | `id`, `user_id`, `song_id`, `played_at` | full play history (a replay adds a new row); index (`user_id`, `played_at DESC`, `id DESC`); index `song_id`; cascades on user/song delete |
 | `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed`; deleting the admin user deletes the room (CASCADE); deleting the controller or current song sets them to NULL; indexes on all three foreign keys and on active rooms by `created_at DESC` |

@@ -25,7 +25,7 @@ Songs store URLs like `/media/audio/<file>`, so the database and the media folde
 
 2. **Connection**: in `.env`, `DATABASE_URL=postgresql+psycopg://soundsync:your_password@localhost:5432/soundsync` (URL-encode special characters).
 
-3. **Schema**: `alembic upgrade head`. This creates all six tables, the indexes and `pg_trgm` (migrations `0001`–`0005`, listed in [`schema.md`](schema.md)).
+3. **Schema**: `alembic upgrade head`. This creates all six tables, the indexes and `pg_trgm` (migrations `0001`–`0006`, listed in [`schema.md`](schema.md)).
 
 4. **Seed data**: `python -m scripts.seed` (details in section 3).
 
@@ -33,7 +33,7 @@ Songs store URLs like `/media/audio/<file>`, so the database and the media folde
 
    ```text
    OK    database connection
-   OK    migration at head: current 0005, head 0005
+   OK    migration at head: current 0006, head 0006
    OK    pg_trgm extension: installed
    OK    tables: 6 present
    OK    seed accounts: 3 present

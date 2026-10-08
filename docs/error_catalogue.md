@@ -97,6 +97,16 @@ Catalog reads (`/songs/*`) are public. Library routes (`/users/me/*`) require `A
 | `POST /users/me/recently-played/{song_id}` | `201` `{ song, played_at }` | `404 SONG_NOT_FOUND`, `401 INVALID_TOKEN` |
 | `GET /users/me/recently-played?limit=` | `200` play history, most recent first (`limit` 1–100, default 20) | `422 VALIDATION_ERROR`, `401 INVALID_TOKEN` |
 
+## Profile examples
+
+Profile routes act on the signed-in user only and require `Authorization: Bearer <JWT>`; without a valid token → `401 INVALID_TOKEN`. Every success returns the updated user (`UserOut`: `id`, `username`, `email`, `is_admin`, `full_name`, `phone`, `bio`, `avatar_url`, `created_at`).
+
+| Request | Success | Errors |
+| --- | --- | --- |
+| `PATCH /users/me` `{ "username"?, "full_name"?, "phone"?, "bio"? }` | `200`; only the fields sent change; text is trimmed; a blank `full_name`, `phone` or `bio` → `null` | `422 VALIDATION_ERROR` (username blank, `null` or > 50, full name > 100, bio > 300, phone not 7–15 digits or using characters other than digits, spaces, `+ ( ) -`, or any other field such as `email` or `is_admin`) |
+| `PUT /users/me/avatar` (multipart: `avatar_file`) | `200`; stored under `MEDIA_ROOT/avatars/` with a random name and served from `/media/avatars/…`; the previous picture file is deleted | `415 UNSUPPORTED_FILE_TYPE` (`.jpg .jpeg .png .webp .gif`), `413 FILE_TOO_LARGE` (`MAX_COVER_UPLOAD_BYTES`), `422 VALIDATION_ERROR` (empty file). A rejected file leaves the old picture in place and nothing new on disk |
+| `DELETE /users/me/avatar` | `200` with `avatar_url: null`; the file is deleted; also `200` when there was no picture | — |
+
 ## Musical Room examples (Phase 5)
 
 All room routes require `Authorization: Bearer <JWT>`; without a valid token → `401 INVALID_TOKEN`. Room IDs are case-insensitive in every path.
@@ -117,7 +127,10 @@ All `/admin/*` routes need an admin JWT: no/invalid token → `401 INVALID_TOKEN
 
 | Request | Success | Errors |
 | --- | --- | --- |
-| `POST /admin/songs` (multipart: `title`, `artist`, `album?`, `category`, `duration_seconds`, `audio_file`, `cover_file?`) | `201` `SongOut`; files stored under `MEDIA_ROOT` with random names and served from `/media/audio/…`, `/media/covers/…`; text fields trimmed, blank `album` → `null` | `415 UNSUPPORTED_FILE_TYPE` (audio: `.mp3 .wav .ogg .oga .opus .m4a .aac .flac .webm`; cover: `.jpg .jpeg .png .webp .gif` — no SVG/HTML, since `/media` is served from the API origin), `413 FILE_TOO_LARGE`, `422 VALIDATION_ERROR` (blank title/artist/category, title > 200, category > 50, duration < 0 or > 24 h, empty file). Nothing is left on disk when an upload is rejected |
+| `POST /admin/songs` (multipart: `title`, `artist`, `album?`, `music_director?`, `category`, `duration_seconds`, `audio_file`, `cover_file?`) | `201` `SongOut`; files stored under `MEDIA_ROOT` with random names and served from `/media/audio/…`, `/media/covers/…`; text fields trimmed, blank `album` or `music_director` → `null` | `415 UNSUPPORTED_FILE_TYPE` (audio: `.mp3 .wav .ogg .oga .opus .m4a .aac .flac .webm`; cover: `.jpg .jpeg .png .webp .gif` — no SVG/HTML, since `/media` is served from the API origin), `413 FILE_TOO_LARGE`, `422 VALIDATION_ERROR` (blank title/artist/category, title, artist, album or music director > 200, category > 50, duration < 0 or > 24 h, empty file). Nothing is left on disk when an upload is rejected |
+| `PATCH /admin/songs/{song_id}` `{ "title"?, "artist"?, "album"?, "music_director"?, "category"?, "duration_seconds"? }` | `200` `SongOut`; only the fields sent change; text trimmed; blank or `null` `album` / `music_director` → `null`; search sees the new details at once | `404 SONG_NOT_FOUND`, `422 VALIDATION_ERROR` (same limits as upload; `title`, `artist`, `category`, `duration_seconds` cannot be blank or `null`; any other field such as `audio_url`). A rejected edit changes nothing |
+| `PUT /admin/songs/{song_id}/cover` (multipart: `cover_file`) | `200` `SongOut` with the new `cover_url`; the old cover file is deleted unless another song still uses it | `404 SONG_NOT_FOUND`, `415 UNSUPPORTED_FILE_TYPE`, `413 FILE_TOO_LARGE`, `422 VALIDATION_ERROR` (empty file). A rejected file keeps the old cover |
+| `DELETE /admin/songs/{song_id}/cover` | `200` `SongOut` with `cover_url: null`; the file is deleted unless another song still uses it | `404 SONG_NOT_FOUND` |
 | `DELETE /admin/songs/{song_id}` | `204`; likes and plays cascade-deleted; active rooms playing it are stopped with no current song and their clients get a `pause` with `song_id: null` (`websocket_contract.md` v1.4); its audio/cover files are removed unless another song still uses them (seed songs share album covers) | `404 SONG_NOT_FOUND` |
 | `GET /admin/users?skip=&limit=` | `200` users by id (never password fields; `limit` 1–500, default 100) | `422 VALIDATION_ERROR` |
 | `GET /admin/rooms` | `200` active rooms, newest first | — |

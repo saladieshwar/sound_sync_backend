@@ -22,6 +22,7 @@ class Song(Base):
     title: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
     artist: Mapped[str] = mapped_column(String(200), index=True, nullable=False)
     album: Mapped[str | None] = mapped_column(String(200), index=True)
+    music_director: Mapped[str | None] = mapped_column(String(200))
     category: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     audio_url: Mapped[str] = mapped_column(String(500), nullable=False)

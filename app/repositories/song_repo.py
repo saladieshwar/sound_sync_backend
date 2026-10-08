@@ -1,4 +1,4 @@
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Song
@@ -85,6 +85,19 @@ def create(db: Session, **fields) -> Song:
     return song
 
 
+def save(db: Session, song: Song) -> Song:
+    db.add(song)
+    db.commit()
+    db.refresh(song)
+    return song
+
+
 def delete(db: Session, song: Song) -> None:
     db.delete(song)
     db.commit()
+
+
+def url_in_use(db: Session, url: str) -> bool:
+    """True if any song still points at this audio or cover URL."""
+    stmt = select(Song.id).where(or_(Song.audio_url == url, Song.cover_url == url)).limit(1)
+    return db.scalar(stmt) is not None
