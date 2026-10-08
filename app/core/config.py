@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PLACEHOLDER_SECRETS = {"change-me", "change-me-to-a-long-random-string"}
@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     MEDIA_URL_PREFIX: str = "/media"
     MAX_AUDIO_UPLOAD_BYTES: int = 50 * 1024 * 1024
     MAX_COVER_UPLOAD_BYTES: int = 5 * 1024 * 1024
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _use_psycopg_driver(cls, url: str) -> str:
+        # Hosts such as Render hand out postgres:// or postgresql:// URLs; only psycopg 3 is installed.
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix) :]
+        return url
 
     @model_validator(mode="after")
     def _require_strong_secret_outside_dev(self) -> "Settings":

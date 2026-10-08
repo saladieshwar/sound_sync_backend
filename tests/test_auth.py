@@ -271,3 +271,16 @@ def test_weak_jwt_secret_rejected_outside_development(secret):
 
 def test_strong_jwt_secret_accepted_in_production():
     Settings(ENVIRONMENT="production", JWT_SECRET_KEY="x" * 48, _env_file=None)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgres://u:p@db.example.com:5432/app",
+        "postgresql://u:p@db.example.com:5432/app",
+        "postgresql+psycopg://u:p@db.example.com:5432/app",
+    ],
+)
+def test_hosted_database_urls_use_the_psycopg_driver(url):
+    settings = Settings(DATABASE_URL=url, _env_file=None)
+    assert settings.DATABASE_URL == "postgresql+psycopg://u:p@db.example.com:5432/app"

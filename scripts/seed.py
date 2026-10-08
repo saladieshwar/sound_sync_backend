@@ -1,5 +1,7 @@
 """Seed fixtures for local dev and QA. Run from backend/: python -m scripts.seed
 
+`--catalog-only` skips the seed accounts (their passwords are public) for hosted deployments.
+
 Idempotent: users are matched by email, songs by (title, artist). Album cover art (SVG) and
 sample audio (WAV, exactly `duration_seconds` long) are generated under MEDIA_ROOT so the
 catalog renders and plays end-to-end without external assets.
@@ -7,6 +9,7 @@ catalog renders and plays end-to-end without external assets.
 
 import math
 import re
+import sys
 import wave
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -142,11 +145,11 @@ def write_covers() -> None:
         path.write_text(_cover_svg(s["album"], s["artist"], s["category"]), encoding="utf-8")
 
 
-def run() -> None:
+def run(with_users: bool = True) -> None:
     write_covers()
     write_audio()
     with SessionLocal() as db:
-        for u in USERS:
+        for u in USERS if with_users else []:
             if not user_repo.get_by_email(db, u["email"]):
                 db.add(
                     User(
@@ -175,4 +178,4 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    run(with_users="--catalog-only" not in sys.argv)
