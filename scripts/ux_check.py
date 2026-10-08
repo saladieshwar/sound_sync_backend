@@ -113,7 +113,9 @@ for (const row of document.querySelectorAll('tbody tr')) {
 """
 MASK_ROOMS = """
 for (const row of document.querySelectorAll('tbody tr')) {
-  if (!row.cells[1].textContent.startsWith('UX check')) row.cells[1].textContent = 'Another room'
+  if (row.cells[1].textContent.startsWith('UX check')) continue
+  row.cells[1].textContent = 'Another room'
+  row.cells[2].querySelectorAll('[aria-hidden="true"]').forEach((avatar) => (avatar.textContent = '•'))
 }
 """
 
@@ -173,6 +175,13 @@ def main() -> int:
         device.wait("window.__audios?.at(-1)?.currentTime > 0.3", label="playback")
         device.wait("document.querySelector('[aria-label=\"Recently Played\"] [data-testid^=\"song-row-\"]')")
         capture(device, "home", results)
+
+        device.click('[aria-label="Albums"] [data-testid^="section-item-"]')
+        device.wait(
+            "location.pathname.startsWith('/album/') && document.querySelector('[data-testid^=\"song-row-\"]')",
+            label="album page",
+        )
+        capture(device, "album", results)
 
         device.click('[data-testid="player-title"]')
         device.wait("location.pathname === '/now-playing'")
