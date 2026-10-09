@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # instead of MEDIA_ROOT (hosts like Render's free plan wipe the local disk on every restart).
     CLOUDINARY_URL: str = ""
     CLOUDINARY_FOLDER: str = "soundsync"
+    # Where uploads go without Cloudinary: "local" (MEDIA_ROOT) or "database" (media_files table).
+    # Empty means "database" in production, whose host disk may be wiped, and "local" otherwise.
+    MEDIA_STORAGE: str = ""
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -59,6 +62,18 @@ class Settings(BaseSettings):
                 f"{_MIN_SECRET_LENGTH} characters when ENVIRONMENT={self.ENVIRONMENT}"
             )
         return self
+
+    @field_validator("MEDIA_STORAGE")
+    @classmethod
+    def _known_media_storage(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in ("", "local", "database"):
+            raise ValueError('MEDIA_STORAGE must be "local", "database" or empty')
+        return value
+
+    @property
+    def media_in_database(self) -> bool:
+        return (self.MEDIA_STORAGE or ("database" if self.ENVIRONMENT == "production" else "local")) == "database"
 
     @property
     def cors_origins_list(self) -> list[str]:

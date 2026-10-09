@@ -1,12 +1,17 @@
 """Uploaded files under MEDIA_ROOT: extension allow-lists, size-limited storage, URL <-> path."""
 
+import mimetypes
 import uuid
 from pathlib import Path
 
 from fastapi import UploadFile, status
+from sqlalchemy import delete
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
+from app.models import MediaFile
 from app.services import cloud_storage
 
 # Files are served by extension (StaticFiles), so the allow-list is what keeps an upload from
@@ -63,23 +68,36 @@ def store_file(upload: UploadFile, subdir: str, suffix: str, max_bytes: int, fie
     return path
 
 
-def store(upload: UploadFile, subdir: str, suffix: str, max_bytes: int, field: str) -> str:
+def store(db: Session, upload: UploadFile, subdir: str, suffix: str, max_bytes: int, field: str) -> str:
     """Stores an upload (size-checked) and returns its public URL: a Cloudinary URL when
-    CLOUDINARY_URL is set, otherwise a `/media/...` URL served from MEDIA_ROOT."""
+    CLOUDINARY_URL is set, otherwise a `/media/...` URL backed by MEDIA_ROOT or, with
+    `settings.media_in_database`, by a media_files row in the caller's transaction."""
     path = store_file(upload, subdir, suffix, max_bytes, field)
-    if not cloud_storage.enabled():
+    if cloud_storage.enabled():
+        resource_type = "image" if suffix in IMAGE_EXTENSIONS else "video"  # Cloudinary files audio as video
+        try:
+            return cloud_storage.upload(path, subdir, resource_type)
+        finally:
+            path.unlink(missing_ok=True)
+    if not settings.media_in_database:
         return public_url(path, subdir)
-    resource_type = "image" if suffix in IMAGE_EXTENSIONS else "video"  # Cloudinary files audio as video
     try:
-        return cloud_storage.upload(path, subdir, resource_type)
+        db.add(MediaFile(key=f"{subdir}/{path.name}", content_type=content_type_for(path.name),
+                         size=path.stat().st_size, data=path.read_bytes()))
+        db.flush()
     finally:
         path.unlink(missing_ok=True)
+    return public_url(path, subdir)
 
 
-def store_image(upload: UploadFile, subdir: str, field: str) -> str:
+def store_image(db: Session, upload: UploadFile, subdir: str, field: str) -> str:
     """Checks and stores an image (cover or avatar); returns its public URL."""
     suffix = check_extension(upload, IMAGE_EXTENSIONS, field)
-    return store(upload, subdir, suffix, settings.MAX_COVER_UPLOAD_BYTES, field)
+    return store(db, upload, subdir, suffix, settings.MAX_COVER_UPLOAD_BYTES, field)
+
+
+def content_type_for(name: str) -> str:
+    return mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
 def public_url(path: Path, subdir: str) -> str:
@@ -96,10 +114,27 @@ def media_path(url: str | None) -> Path | None:
     return path if path.is_relative_to(root) and path != root else None
 
 
-def remove(url: str | None) -> None:
+def media_key(url: str | None) -> str | None:
+    """`audio/<name>` for a `/media/audio/<name>` URL (the media_files key), if inside MEDIA_ROOT."""
+    path = media_path(url)
+    return path.relative_to(Path(settings.MEDIA_ROOT).resolve()).as_posix() if path else None
+
+
+def remove(db: Session, url: str | None) -> None:
+    """Deletes the file behind `url` wherever it is stored. Database rows are deleted (and
+    committed) only while the session is usable; after a failed flush the caller's rollback
+    discards rows added in the same transaction anyway."""
     if cloud_storage.owns(url):
         cloud_storage.delete(url)
         return
     path = media_path(url)
-    if path is not None:
-        path.unlink(missing_ok=True)
+    if path is None:
+        return
+    path.unlink(missing_ok=True)
+    if not db.is_active:
+        return
+    try:
+        if db.execute(delete(MediaFile).where(MediaFile.key == media_key(url))).rowcount:
+            db.commit()
+    except SQLAlchemyError:
+        db.rollback()
