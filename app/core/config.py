@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     MEDIA_URL_PREFIX: str = "/media"
     MAX_AUDIO_UPLOAD_BYTES: int = 50 * 1024 * 1024
     MAX_COVER_UPLOAD_BYTES: int = 5 * 1024 * 1024
+    # cloudinary://<api_key>:<api_secret>@<cloud_name>. When set, uploads are stored on Cloudinary
+    # instead of MEDIA_ROOT (hosts like Render's free plan wipe the local disk on every restart).
+    CLOUDINARY_URL: str = ""
+    CLOUDINARY_FOLDER: str = "soundsync"
 
     @field_validator("DATABASE_URL")
     @classmethod
