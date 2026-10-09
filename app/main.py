@@ -2,9 +2,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.api.routes import media
 from app.core import log_redaction
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -26,9 +26,8 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(api_router)
 
-    media_root = Path(settings.MEDIA_ROOT)
-    media_root.mkdir(parents=True, exist_ok=True)
-    app.mount(settings.MEDIA_URL_PREFIX, StaticFiles(directory=media_root), name="media")
+    Path(settings.MEDIA_ROOT).mkdir(parents=True, exist_ok=True)
+    app.include_router(media.router, prefix=settings.MEDIA_URL_PREFIX.rstrip("/"), tags=["media"])
 
     return app
 

@@ -30,10 +30,10 @@ def upload_song(
     stored: list[str] = []
     try:
         audio_url = media_service.store(
-            audio_file, "audio", audio_suffix, settings.MAX_AUDIO_UPLOAD_BYTES, "audio_file"
+            db, audio_file, "audio", audio_suffix, settings.MAX_AUDIO_UPLOAD_BYTES, "audio_file"
         )
         stored.append(audio_url)
-        cover_url = media_service.store_image(cover_file, "covers", "cover_file") if has_cover else None
+        cover_url = media_service.store_image(db, cover_file, "covers", "cover_file") if has_cover else None
         if cover_url:
             stored.append(cover_url)
         return song_repo.create(
@@ -49,7 +49,7 @@ def upload_song(
         )
     except BaseException:
         for url in stored:
-            media_service.remove(url)
+            media_service.remove(db, url)
         raise
 
 
@@ -66,15 +66,15 @@ def _replace_cover(db: Session, song: Song, new_url: str | None) -> Song:
         song.cover_url = new_url
         song = song_repo.save(db, song)
     except BaseException:
-        media_service.remove(new_url)
+        media_service.remove(db, new_url)
         raise
     if old_url and old_url != new_url and not song_repo.url_in_use(db, old_url):
-        media_service.remove(old_url)
+        media_service.remove(db, old_url)
     return song
 
 
 def set_cover(db: Session, song: Song, cover_file: UploadFile) -> Song:
-    return _replace_cover(db, song, media_service.store_image(cover_file, "covers", "cover_file"))
+    return _replace_cover(db, song, media_service.store_image(db, cover_file, "covers", "cover_file"))
 
 
 def remove_cover(db: Session, song: Song) -> Song:
@@ -90,5 +90,5 @@ def delete_song(db: Session, song: Song) -> list[str]:
     song_repo.delete(db, song)
     for url in urls:
         if not song_repo.url_in_use(db, url):
-            media_service.remove(url)
+            media_service.remove(db, url)
     return stopped_rooms

@@ -18,15 +18,15 @@ def update_profile(db: Session, user: User, changes: ProfileUpdate) -> User:
 
 def set_avatar(db: Session, user: User, avatar_file: UploadFile) -> User:
     """Stores the new picture first, so a rejected upload leaves the old one untouched."""
-    new_url = media_service.store_image(avatar_file, AVATAR_DIR, "avatar_file")
+    new_url = media_service.store_image(db, avatar_file, AVATAR_DIR, "avatar_file")
     old_url = user.avatar_url
     try:
         user.avatar_url = new_url
         user = user_repo.save(db, user)
     except BaseException:
-        media_service.remove(new_url)
+        media_service.remove(db, new_url)
         raise
-    media_service.remove(old_url)
+    media_service.remove(db, old_url)
     return user
 
 
@@ -34,5 +34,5 @@ def remove_avatar(db: Session, user: User) -> User:
     old_url = user.avatar_url
     user.avatar_url = None
     user = user_repo.save(db, user)
-    media_service.remove(old_url)
+    media_service.remove(db, old_url)
     return user

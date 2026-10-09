@@ -29,8 +29,9 @@ services:
         value: https://musicpartner.vercel.app
       - key: FRONTEND_BASE_URL
         value: https://musicpartner.vercel.app
-      # Uploaded songs, covers and avatars must live off-disk (the free plan's disk is wiped on
-      # restart). Set in the Render dashboard: cloudinary://<api_key>:<api_secret>@<cloud_name>
+      # The free plan's disk is wiped on restart, so with ENVIRONMENT=production uploads are kept in
+      # the database (media_files). Optionally set this in the dashboard to use Cloudinary instead:
+      # cloudinary://<api_key>:<api_secret>@<cloud_name>
       - key: CLOUDINARY_URL
         sync: false
 
