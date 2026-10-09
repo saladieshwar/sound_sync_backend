@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
@@ -29,15 +27,15 @@ def upload_song(
     if has_cover:
         media_service.check_extension(cover_file, media_service.IMAGE_EXTENSIONS, "cover_file")
 
-    stored: list[Path] = []
+    stored: list[str] = []
     try:
-        audio_path = media_service.store_file(
+        audio_url = media_service.store(
             audio_file, "audio", audio_suffix, settings.MAX_AUDIO_UPLOAD_BYTES, "audio_file"
         )
-        stored.append(audio_path)
+        stored.append(audio_url)
         cover_url = media_service.store_image(cover_file, "covers", "cover_file") if has_cover else None
         if cover_url:
-            stored.append(media_service.media_path(cover_url))
+            stored.append(cover_url)
         return song_repo.create(
             db,
             title=title,
@@ -46,12 +44,12 @@ def upload_song(
             music_director=music_director or None,
             category=category,
             duration_seconds=duration_seconds,
-            audio_url=media_service.public_url(audio_path, "audio"),
+            audio_url=audio_url,
             cover_url=cover_url,
         )
     except BaseException:
-        for path in stored:
-            path.unlink(missing_ok=True)
+        for url in stored:
+            media_service.remove(url)
         raise
 
 

@@ -103,6 +103,8 @@ Read by `app/core/config.py`. Every setting has a default; `.env` overrides it.
 | `MEDIA_URL_PREFIX` | `/media` | URL path media is served from | Rarely; stored song URLs use it |
 | `MAX_AUDIO_UPLOAD_BYTES` | `52428800` (50 MB) | Admin audio upload limit (`413 FILE_TOO_LARGE` above it) | To allow larger/smaller files |
 | `MAX_COVER_UPLOAD_BYTES` | `5242880` (5 MB) | Image upload limit: admin song covers and profile pictures | Same |
+| `CLOUDINARY_URL` | empty (uploads stay in `MEDIA_ROOT`) | `cloudinary://<api_key>:<api_secret>@<cloud_name>`; when set, uploaded songs, covers and avatars are stored on Cloudinary and their `https://res.cloudinary.com/…` URLs are saved | Required on Render's free plan, whose disk is wiped on every restart |
+| `CLOUDINARY_FOLDER` | `soundsync` | Cloudinary folder that uploads go under (`<folder>/audio`, `/covers`, `/avatars`) | Same |
 
 Test and tool settings (environment variables, not in `.env`):
 

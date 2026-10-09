@@ -7,6 +7,7 @@ from fastapi import UploadFile, status
 
 from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
+from app.services import cloud_storage
 
 # Files are served by extension (StaticFiles), so the allow-list is what keeps an upload from
 # being served as HTML/JS/SVG on the API origin.
@@ -62,10 +63,23 @@ def store_file(upload: UploadFile, subdir: str, suffix: str, max_bytes: int, fie
     return path
 
 
+def store(upload: UploadFile, subdir: str, suffix: str, max_bytes: int, field: str) -> str:
+    """Stores an upload (size-checked) and returns its public URL: a Cloudinary URL when
+    CLOUDINARY_URL is set, otherwise a `/media/...` URL served from MEDIA_ROOT."""
+    path = store_file(upload, subdir, suffix, max_bytes, field)
+    if not cloud_storage.enabled():
+        return public_url(path, subdir)
+    resource_type = "image" if suffix in IMAGE_EXTENSIONS else "video"  # Cloudinary files audio as video
+    try:
+        return cloud_storage.upload(path, subdir, resource_type)
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def store_image(upload: UploadFile, subdir: str, field: str) -> str:
     """Checks and stores an image (cover or avatar); returns its public URL."""
     suffix = check_extension(upload, IMAGE_EXTENSIONS, field)
-    return public_url(store_file(upload, subdir, suffix, settings.MAX_COVER_UPLOAD_BYTES, field), subdir)
+    return store(upload, subdir, suffix, settings.MAX_COVER_UPLOAD_BYTES, field)
 
 
 def public_url(path: Path, subdir: str) -> str:
@@ -83,6 +97,9 @@ def media_path(url: str | None) -> Path | None:
 
 
 def remove(url: str | None) -> None:
+    if cloud_storage.owns(url):
+        cloud_storage.delete(url)
+        return
     path = media_path(url)
     if path is not None:
         path.unlink(missing_ok=True)
