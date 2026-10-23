@@ -378,3 +378,102 @@ def test_admin_deleting_the_playing_song_stops_the_room_for_everyone(peers, room
             db.execute(update(User).where(User.id == site_admin.id).values(is_admin=False))
             db.commit()
 
+
+# --- group chat ---------------------------------------------------------------------
+
+
+def test_chat_message_broadcasts_to_everyone_and_any_participant_can_send(peers, room):
+    from app.realtime import chat_rate_limit
+
+    chat_rate_limit.clear(room)
+    admin, bob, carol = peers["admin"], peers["bob"], peers["carol"]
+    with admin.open(room) as (a, _), bob.open(room) as (b, _), carol.open(room) as (c, _):
+        expect(a, "user_joined")
+        expect(a, "user_joined")
+        expect(b, "user_joined")
+
+        send(b, "chat_message", text="  hello room  ")
+        for ws in (a, b, c):
+            message = expect(ws, "chat_message")
+            assert message["sender_user_id"] == bob.id
+            assert message["payload"]["text"] == "hello room"
+            assert message["payload"]["username"] == "bob"
+            assert message["payload"]["is_room_admin"] is False
+            assert "id" in message["payload"]
+            assert "created_at" in message["payload"]
+
+        send(a, "chat_message", text="welcome")
+        for ws in (a, b, c):
+            message = expect(ws, "chat_message")
+            assert message["sender_user_id"] == admin.id
+            assert message["payload"]["text"] == "welcome"
+            assert message["payload"]["is_room_admin"] is True
+
+
+def test_chat_history_is_in_room_state_for_late_joiners(peers, room):
+    from app.realtime import chat_rate_limit
+
+    chat_rate_limit.clear(room)
+    admin, bob, carol = peers["admin"], peers["bob"], peers["carol"]
+    with admin.open(room) as (a, _), bob.open(room) as (b, _):
+        expect(a, "user_joined")
+        send(a, "chat_message", text="first")
+        expect(a, "chat_message")
+        expect(b, "chat_message")
+        send(b, "chat_message", text="second")
+        expect(a, "chat_message")
+        expect(b, "chat_message")
+
+        with carol.open(room) as (_, state):
+            texts = [m["text"] for m in state["recent_messages"]]
+            assert texts == ["first", "second"]
+            assert state["recent_messages"][0]["is_room_admin"] is True
+            assert state["recent_messages"][0]["user_id"] == admin.id
+            assert state["recent_messages"][1]["username"] == "bob"
+            assert state["recent_messages"][1]["user_id"] == bob.id
+
+
+def test_empty_and_overlong_chat_are_rejected(peers, room):
+    from app.realtime import chat_rate_limit
+
+    chat_rate_limit.clear(room)
+    with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+        expect(a, "user_joined")
+        send(a, "chat_message", text="   ")
+        assert expect(a, "error")["payload"] == {"code": "INVALID_PAYLOAD"}
+        send(a, "chat_message", text="x" * 301)
+        assert expect(a, "error")["payload"] == {"code": "INVALID_PAYLOAD"}
+        assert_silent(b)
+
+
+def test_chat_rate_limit_rejects_bursts(peers, room):
+    from app.realtime import chat_rate_limit
+
+    chat_rate_limit.clear(room)
+    with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+        expect(a, "user_joined")
+        send(a, "chat_message", text="one")
+        expect(a, "chat_message")
+        expect(b, "chat_message")
+        send(a, "chat_message", text="two")
+        assert expect(a, "error")["payload"] == {"code": "RATE_LIMITED"}
+        assert_silent(b)
+
+
+def test_closing_the_room_clears_chat_history(peers, room):
+    from app.models import RoomMessage
+    from app.realtime import chat_rate_limit
+    from sqlalchemy import select
+
+    chat_rate_limit.clear(room)
+    with peers["admin"].open(room) as (a, _), peers["bob"].open(room) as (b, _):
+        expect(a, "user_joined")
+        send(a, "chat_message", text="bye soon")
+        expect(a, "chat_message")
+        expect(b, "chat_message")
+
+    peers["admin"].leave(room)
+    with SessionLocal() as db:
+        leftover = list(db.scalars(select(RoomMessage).where(RoomMessage.room_id == room)))
+        assert leftover == []
+

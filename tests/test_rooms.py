@@ -68,6 +68,7 @@ def test_create_room_rejects_invalid_name(client, users, name):
 def test_room_endpoints_require_auth(client, users):
     room = _create(client, users["admin"][0])
     assert client.post("/rooms", json={"name": "x"}).status_code == 401
+    assert client.get("/rooms/mine").status_code == 401
     assert client.get(f"/rooms/{room['id']}").status_code == 401
     assert client.post(f"/rooms/{room['id']}/join").status_code == 401
     assert client.post(f"/rooms/{room['id']}/leave").status_code == 401
@@ -75,6 +76,30 @@ def test_room_endpoints_require_auth(client, users):
         client.post(f"/rooms/{room['id']}/transfer-access", json={"target_user_id": 1}).status_code
         == 401
     )
+
+
+def test_list_my_rooms_returns_active_rooms_i_created_or_joined(client, users):
+    admin_h, _ = users["admin"]
+    bob_h, _ = users["bob"]
+    mine = _create(client, admin_h, "Admin's room")
+    joined = _create(client, bob_h, "Bob's room")
+    assert client.post(f"/rooms/{joined['id']}/join", headers=admin_h).status_code == 200
+    closed = _create(client, admin_h, "Soon closed")
+    assert client.post(f"/rooms/{closed['id']}/leave", headers=admin_h).status_code == 200
+
+    response = client.get("/rooms/mine", headers=admin_h)
+    assert response.status_code == 200
+    ids = [room["id"] for room in response.json()]
+    assert ids == [joined["id"], mine["id"]]
+    assert closed["id"] not in ids
+
+    assert client.get("/rooms/mine", headers=bob_h).json()[0]["id"] == joined["id"]
+
+
+def test_list_my_rooms_is_empty_when_not_in_any_room(client, users):
+    response = client.get("/rooms/mine", headers=users["carol"][0])
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 # --- get / join ---------------------------------------------------------------------

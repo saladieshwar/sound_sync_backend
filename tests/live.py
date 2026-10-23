@@ -147,7 +147,7 @@ def expect(ws, event_type: str, timeout: float = RECV_TIMEOUT) -> dict:
         message = recv(ws, remaining)
         if message["type"] == event_type:
             return message
-        if message["type"] not in ("user_joined", "user_left"):
+        if message["type"] not in ("user_joined", "user_left", "chat_message"):
             pytest.fail(f"expected {event_type!r}, got {message}")
 
 

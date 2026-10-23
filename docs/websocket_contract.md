@@ -1,11 +1,12 @@
 # WebSocket Event Contract (RT → FE/BE)
 
-Status: **Frozen v1.4** (Phase 8). Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge. A new engineer can build a room client from this page alone: start with "Implementing a client" at the end.
+Status: **Frozen v1.5**. Source of truth: `app/realtime/events.py`. Changes require notifying BE and FE before merge. A new engineer can build a room client from this page alone: start with "Implementing a client" at the end.
 
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| v1.5 | 2026-10-23 | Additive: group chat. New client/server event `chat_message` (any participant); `room_state` adds `recent_messages` (last 50, oldest first); new error `RATE_LIMITED` (one chat line per user per second). Chat is persisted in `room_messages` and cleared when the room is closed |
 | v1.0 | 2026-10-03 | Phase 1 baseline |
 | v1.1 | 2026-10-03 | Phase 5 delivery. Additive only: playback broadcasts carry the authoritative `is_playing`; `room_state` adds `online_user_ids`; new `error` codes `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED`; close codes documented; presence events are per user (second tab does not re-announce); rejected sockets are accepted then closed with `1008` so browsers can read the code |
 | v1.2 | 2026-10-07 | Additive only: `time_sync` event (client clock-offset estimation, answered to the sender only); clients follow the room timeline on the server clock with continuous drift correction instead of a 0.5 s seek-only tolerance. Phase 6: no message changes; measured sync under realistic networks and the agreed tolerance are in `docs/sync_tuning.md` |
@@ -90,9 +91,11 @@ Buffering is skipped (no correction while the audio is stalled) and caught up af
 | `access_transfer` | server → client | `controller_user_id` |
 | `user_joined` | server → others | `user_id` (user's first socket only) |
 | `user_left` | server → client | `user_id`, `reason` (`left` / `disconnected`), `controller_user_id` (when `left`) |
-| `room_state` | server → new socket | full `RoomOut` snapshot + `online_user_ids` |
+| `room_state` | server → new socket | full `RoomOut` snapshot + `online_user_ids` + `recent_messages` |
 | `room_closed` | server → client | `{}` (admin left; sockets then close with `1000`) |
 | `time_sync` | client → server → sender | `client_ts` (epoch ms, echoed back with `server_ts`) |
+| `chat_message` | client → server | `text` (1–300 chars after trim; required) |
+| `chat_message` | server → client | `id`, `user_id`, `text`, `username`, `is_room_admin`, `created_at` (ISO) |
 | `error` | server → sender | `code` (see below); the socket stays open unless noted |
 
 Client `song_id` on `play`/`pause`/`seek` is optional and ignored; the server uses the room's current song.
@@ -102,18 +105,40 @@ Client `song_id` on `play`/`pause`/`seek` is optional and ignored; the server us
 | Code | When |
 | --- | --- |
 | `INVALID_MESSAGE` | Not JSON, binary frame, missing `type`, or unknown event type |
-| `INVALID_PAYLOAD` | `position_seconds` missing / negative / > 86400, `song_change` without `song_id`, or `time_sync` without a numeric `client_ts` |
+| `INVALID_PAYLOAD` | `position_seconds` missing / negative / > 86400, `song_change` without `song_id`, `time_sync` without a numeric `client_ts`, or `chat_message` with empty / overlong `text` |
 | `EVENT_NOT_ALLOWED` | Client sent a server-only event (`room_state`, `access_transfer`, …) |
 | `NOT_ROOM_CONTROLLER` | Sender is not the current `controller_user_id` |
 | `NO_CURRENT_SONG` | `play` / `pause` / `seek` before any `song_change` |
 | `SONG_NOT_FOUND` | `song_change` to an unknown song |
 | `ROOM_CLOSED` | Room was closed meanwhile; the socket is then closed with `1008` |
+| `RATE_LIMITED` | `chat_message` sent less than 1 s after the same user's previous chat in this room |
 
 Rejected messages are never broadcast and never change room state.
 
+### Group chat
+
+```json
+{ "type": "chat_message", "payload": { "text": "hello room" } }
+{
+  "type": "chat_message",
+  "payload": {
+    "id": 12,
+    "user_id": 7,
+    "text": "hello room",
+    "username": "bob",
+    "is_room_admin": false,
+    "created_at": "2026-10-23T12:00:00+00:00"
+  },
+  "sender_user_id": 7,
+  "server_ts": 1780000000000
+}
+```
+
+Any joined participant may send chat (not only the controller). The server strips the text, stores it, and broadcasts the saved row to every socket in the room including the sender. `room_state.recent_messages` is the last 50 lines (oldest first) so a late joiner or reconnect sees recent history. Closing the room deletes its chat rows.
+
 ## Rules
 
-- Only playback events (`play`, `pause`, `seek`, `song_change`) and `time_sync` are accepted from clients. `time_sync` needs no controller rights.
+- Playback events (`play`, `pause`, `seek`, `song_change`), `time_sync` and `chat_message` are accepted from clients. `time_sync` and `chat_message` need no controller rights.
 - A playback event is applied and broadcast only if the sender is the room's current `controller_user_id`, read from the DB under a row lock on each message (never trusted from the client), so a transfer that commits first always wins.
 - Accepted playback events are persisted through BE (`room_service.apply_playback_event`) before broadcast. `song_change` starts playing; `pause` stops; `seek` keeps the current play state.
 - Control transfer happens over REST (`POST /rooms/{id}/transfer-access`); RT then broadcasts `access_transfer`.

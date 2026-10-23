@@ -984,6 +984,37 @@
         ]
       }
     },
+    "/rooms/mine": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "List My Rooms",
+        "description": "Active rooms the current user has created or joined (for returning after leaving the page).",
+        "operationId": "list_my_rooms_rooms_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoomOut"
+                  },
+                  "type": "array",
+                  "title": "Response List My Rooms Rooms Mine Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/rooms/{room_id}": {
       "get": {
         "tags": [

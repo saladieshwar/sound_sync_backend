@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
-from app.models import MusicalRoom, RoomStatus
+from app.models import MusicalRoom, RoomMessage, RoomStatus
+from app.realtime.events import RECENT_CHAT_LIMIT
 from app.repositories import room_repo, song_repo
 from app.schemas.room import RoomOut
 
@@ -58,6 +59,10 @@ def create_room(db: Session, *, name: str, admin_user_id: int) -> MusicalRoom:
     )
 
 
+def list_my_rooms(db: Session, user_id: int) -> list[MusicalRoom]:
+    return room_repo.list_active_for_user(db, user_id)
+
+
 def join_room(db: Session, room_id: str, user_id: int) -> MusicalRoom:
     """Idempotent: joining a room you are already in returns the room unchanged."""
     room = get_active_room_or_404(db, room_id)
@@ -86,7 +91,9 @@ def leave_room(db: Session, room_id: str, user_id: int) -> tuple[MusicalRoom, bo
         room.status = RoomStatus.CLOSED
         room.is_playing = False
         room.participants.clear()
-        return room_repo.save(db, room), True
+        room = room_repo.save(db, room)
+        room_repo.delete_messages_for_room(db, room.id)
+        return room, True
 
     room.participants.remove(participant)
     if room.controller_user_id == user_id:
@@ -165,3 +172,28 @@ def playback_payload(room: MusicalRoom) -> dict:
         "position_seconds": room.position_seconds,
         "is_playing": room.is_playing,
     }
+
+
+def chat_payload(message: RoomMessage, *, room_admin_user_id: int) -> dict:
+    """Canonical chat line for room_state history and chat_message broadcasts."""
+    return {
+        "id": message.id,
+        "user_id": message.user_id,
+        "text": message.text,
+        "username": message.user.username,
+        "is_room_admin": message.user_id == room_admin_user_id,
+        "created_at": message.created_at.isoformat(),
+    }
+
+
+def recent_chat_messages(db: Session, room: MusicalRoom) -> list[dict]:
+    messages = room_repo.list_recent_messages(db, room.id, limit=RECENT_CHAT_LIMIT)
+    return [chat_payload(m, room_admin_user_id=room.admin_user_id) for m in messages]
+
+
+def post_chat_message(db: Session, room_id: str, *, user_id: int, text: str) -> dict:
+    """Persists one chat line from a room participant. Returns the broadcast payload."""
+    room = get_active_room_or_404(db, room_id)
+    require_participant(db, room, user_id)
+    message = room_repo.add_message(db, room_id=room.id, user_id=user_id, text=text)
+    return chat_payload(message, room_admin_user_id=room.admin_user_id)

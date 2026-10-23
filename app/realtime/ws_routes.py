@@ -9,10 +9,11 @@ from pydantic import ValidationError
 from app.core.errors import AppError, ErrorCode
 from app.core.security import decode_access_token
 from app.db.session import SessionLocal
-from app.realtime import sync_facade
+from app.realtime import chat_rate_limit, sync_facade
 from app.realtime.connection_manager import manager
 from app.realtime.events import (
     PLAYBACK_EVENTS,
+    ChatMessagePayload,
     ClientMessage,
     EventType,
     PlaybackPayload,
@@ -35,7 +36,9 @@ def _authorize(room_id: str, user_id: int) -> dict | None:
             return None
         if not room_repo.get_participant(db, room.id, user_id):
             return None
-        return room_service.to_room_out(room).model_dump(mode="json")
+        snapshot = room_service.to_room_out(room).model_dump(mode="json")
+        snapshot["recent_messages"] = room_service.recent_chat_messages(db, room)
+        return snapshot
 
 
 def _apply_playback(room_id: str, user_id: int, event: EventType, payload: PlaybackPayload):
@@ -53,6 +56,15 @@ def _apply_playback(room_id: str, user_id: int, event: EventType, payload: Playb
         except AppError as exc:
             return None, exc.code
         return room_service.playback_payload(room), None
+
+
+def _post_chat(room_id: str, user_id: int, text: str):
+    """Persists a chat line. Returns (broadcast_payload, None) or (None, error_code)."""
+    with SessionLocal() as db:
+        try:
+            return room_service.post_chat_message(db, room_id, user_id=user_id, text=text), None
+        except AppError as exc:
+            return None, exc.code
 
 
 async def _send_error(websocket: WebSocket, code: str) -> None:
@@ -117,6 +129,34 @@ async def room_socket(websocket: WebSocket, room_id: str, token: str = Query("")
                     websocket,
                     ServerMessage(type=EventType.TIME_SYNC, payload={"client_ts": sync.client_ts}),
                 )
+                continue
+            if message.type == EventType.CHAT_MESSAGE:
+                try:
+                    chat = ChatMessagePayload.model_validate(message.payload)
+                except ValidationError:
+                    await _send_error(websocket, "INVALID_PAYLOAD")
+                    continue
+                if not chat_rate_limit.allow(room_id, user_id):
+                    await _send_error(websocket, "RATE_LIMITED")
+                    continue
+                async with sync_facade.room_lock(room_id):
+                    chat_payload, error = await run_in_threadpool(
+                        _post_chat, room_id, user_id, chat.text
+                    )
+                    if not error:
+                        await manager.broadcast(
+                            room_id,
+                            ServerMessage(
+                                type=EventType.CHAT_MESSAGE,
+                                payload=chat_payload,
+                                sender_user_id=user_id,
+                            ),
+                        )
+                if error:
+                    await _send_error(websocket, error)
+                    if error in (ErrorCode.ROOM_CLOSED, ErrorCode.ROOM_NOT_FOUND):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        break
                 continue
             if message.type not in PLAYBACK_EVENTS:
                 await _send_error(websocket, "EVENT_NOT_ALLOWED")

@@ -34,7 +34,7 @@ Every code below is checked against `app/core/errors.py` and has at least one pa
 
 Health endpoints are for monitoring and do not use the error shape: `GET /health` is always `200 {"status": "ok"}` while the process runs; `GET /ready` is `200 {"status": "ready", "database": "up"}` or `503 {"status": "unavailable", "database": "down"}`.
 
-WebSocket errors are not HTTP responses: they arrive as `{ "type": "error", "payload": { "code": … } }` with the codes `INVALID_MESSAGE`, `INVALID_PAYLOAD`, `EVENT_NOT_ALLOWED`, `NOT_ROOM_CONTROLLER`, `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED` (meanings in `docs/websocket_contract.md` → "Error codes").
+WebSocket errors are not HTTP responses: they arrive as `{ "type": "error", "payload": { "code": … } }` with the codes `INVALID_MESSAGE`, `INVALID_PAYLOAD`, `EVENT_NOT_ALLOWED`, `NOT_ROOM_CONTROLLER`, `NO_CURRENT_SONG`, `SONG_NOT_FOUND`, `ROOM_CLOSED`, `RATE_LIMITED` (meanings in `docs/websocket_contract.md` → "Error codes").
 
 ## Auth examples (Phase 2)
 
@@ -114,6 +114,7 @@ All room routes require `Authorization: Bearer <JWT>`; without a valid token →
 | Request | Success | Errors |
 | --- | --- | --- |
 | `POST /rooms` `{ "name": "Friday night" }` | `201` `RoomOut`; 8-char upper-case `id`, `join_link`, creator is admin + controller + first participant | `422 VALIDATION_ERROR` (name blank or > 100 chars) |
+| `GET /rooms/mine` | `200` list of active `RoomOut` the current user has created or joined, newest first | — |
 | `GET /rooms/{room_id}` | `200` `RoomOut` | `403 NOT_ROOM_PARTICIPANT`, `404 ROOM_NOT_FOUND`, `410 ROOM_CLOSED` |
 | `POST /rooms/{room_id}/join` | `200` `RoomOut`; joining again is a no-op | `404 ROOM_NOT_FOUND`, `410 ROOM_CLOSED` |
 | `POST /rooms/{room_id}/leave` | `200` `{ "message": "Left room" }` (participant row deleted; control returns to admin if the leaver was controller) or `{ "message": "Room closed" }` (admin left: room closed, all participant rows deleted) | `403 NOT_ROOM_PARTICIPANT`, `404`, `410` |

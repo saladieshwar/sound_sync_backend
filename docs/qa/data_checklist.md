@@ -19,6 +19,8 @@ What happens to related rows when a user, song or room is deleted. The database 
 | `musical_rooms.current_song_id` | `songs.id` | SET NULL | A room playing a deleted song is left with no song (the admin delete also stops it and tells the clients) | `test_data_integrity::test_deleting_a_song_removes_library_rows_and_clears_rooms`, `test_room_sync::test_admin_deleting_the_playing_song_stops_the_room_for_everyone` |
 | `room_participants.room_id` | `musical_rooms.id` | CASCADE | Deleting a room removes its participant rows, and only those | `test_data_integrity::test_deleting_a_room_removes_only_its_participants`, `test_rooms::test_deleting_room_cascades_to_participants` |
 | `room_participants.user_id` | `users.id` | CASCADE | A deleted user leaves every room they had joined | `test_data_integrity::test_deleting_a_user_removes_their_data_and_the_rooms_they_own` |
+| `room_messages.room_id` | `musical_rooms.id` | CASCADE | Deleting a room removes its chat lines | `test_room_sync::test_closing_the_room_clears_chat_history` |
+| `room_messages.user_id` | `users.id` | CASCADE | Deleting a user removes the chat lines they wrote | `test_data_integrity::test_deleting_a_user_removes_their_data_and_the_rooms_they_own` |
 
 Users and songs themselves are never deleted by a cascade: no foreign key points from them to anything else.
 
@@ -27,7 +29,7 @@ Users and songs themselves are never deleted by a cascade: no foreign key points
 | # | Check | How | Result | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Schema is at the final migration with no drift | `alembic current` = `0005 (head)`; `alembic check` = no new upgrade operations | `0005`, no drift (dev database and restored copy) | Done |
-| 2 | Delete rules are identical in the database, the models and this page | `test_delete_rules_match_in_database_models_and_checklist` (reads `pg_constraint`) | 9 foreign keys, all match | Done |
+| 2 | Delete rules are identical in the database, the models and this page | `test_delete_rules_match_in_database_models_and_checklist` (reads `pg_constraint`) | 11 foreign keys, all match | Done |
 | 3 | Every delete rule works on real rows | The three `test_deleting_…` tests above, plus the existing admin, library and room tests | Pass | Done |
 | 4 | Cascades never scan a whole table | `test_every_foreign_key_is_indexed_so_deletes_never_scan`: every foreign-key column is the first column of an index | 9 of 9 indexed | Done |
 | 5 | Data rules enforced by the database | Unique lower-case email, bcrypt-only `password_hash` (`ck_users_*`), composite primary keys on `liked_songs` and `room_participants`, `room_status` enum | `tests/test_auth.py` (AUTH-02, AUTH-07), `test_library.py` (LIB-02), `test_rooms.py` | Done |
