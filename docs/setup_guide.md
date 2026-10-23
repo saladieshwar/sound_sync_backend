@@ -66,7 +66,7 @@ Run everything from `backend/`.
    | `http://localhost:8000/health` | `{"status": "ok"}` |
    | `http://localhost:8000/ready` | `{"status": "ready", "database": "up"}` |
    | `http://localhost:8000/docs` | Swagger UI with auth, songs, library, rooms, admin |
-   | `alembic current` | `0006 (head)` |
+   | `alembic current` | `0008 (head)` |
    | `python -m scripts.check_db` | every line `OK` |
    | `pytest` | all tests pass |
 
@@ -163,7 +163,7 @@ Endpoints at a glance:
 | Catalog | Public | `GET /songs`, `/songs/search?q=`, `/songs/categories`, `/songs/category/{name}`, `/songs/albums`, `/songs/album/{name}`, `/songs/{id}`; media files under `/media/…` |
 | Profile | Login token | `PATCH /users/me`, `PUT`/`DELETE /users/me/avatar` |
 | Library | Login token | `GET /users/me/liked-songs`, `POST`/`DELETE /users/me/liked-songs/{song_id}`, `GET /users/me/recently-played`, `POST /users/me/recently-played/{song_id}` |
-| Rooms | Login token | `POST /rooms`, `GET /rooms/{id}`, `POST /rooms/{id}/join`, `POST /rooms/{id}/leave`, `POST /rooms/{id}/transfer-access`; WebSocket `/rooms/{id}/ws?token=` |
+| Rooms | Login token | `POST /rooms`, `GET /rooms/mine`, `GET /rooms/{id}`, `POST /rooms/{id}/join`, `POST /rooms/{id}/leave`, `POST /rooms/{id}/transfer-access`; WebSocket `/rooms/{id}/ws?token=` |
 | Admin | Admin token | `POST /admin/songs`, `PATCH /admin/songs/{id}`, `PUT`/`DELETE /admin/songs/{id}/cover`, `DELETE /admin/songs/{id}`, `GET /admin/users`, `GET /admin/rooms` |
 
 ## 8. Troubleshooting

@@ -8,7 +8,9 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
+    Text,
     func,
     text,
 )
@@ -80,4 +82,32 @@ class RoomParticipant(Base):
     )
 
     room: Mapped[MusicalRoom] = relationship(back_populates="participants")
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class RoomMessage(Base):
+    """One line of group chat in a musical room. Cleared when the room is closed."""
+
+    __tablename__ = "room_messages"
+    __table_args__ = (
+        Index(
+            "ix_room_messages_room_created_at_id",
+            "room_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("musical_rooms.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    text: Mapped[str] = mapped_column(String(300), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
     user: Mapped[User] = relationship(lazy="joined")

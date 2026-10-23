@@ -18,6 +18,12 @@ def create_room(body: RoomCreateRequest, user: CurrentUser, db: DbSession):
     return room_service.to_room_out(room)
 
 
+@router.get("/mine", response_model=list[RoomOut])
+def list_my_rooms(user: CurrentUser, db: DbSession):
+    """Active rooms the current user has created or joined (for returning after leaving the page)."""
+    return [room_service.to_room_out(room) for room in room_service.list_my_rooms(db, user.id)]
+
+
 @router.get("/{room_id}", response_model=RoomOut, responses=_errors)
 def get_room(room_id: str, user: CurrentUser, db: DbSession):
     room = room_service.get_active_room_or_404(db, room_id)

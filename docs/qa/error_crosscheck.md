@@ -50,6 +50,7 @@ Sent as `{ "type": "error", "payload": { "code" } }`; documented in [`../websock
 | `NO_CURRENT_SONG` | `test_room_sync::test_bad_messages_get_error_and_socket_stays_up` (`play` before a song) | "Pick a song for the room first." | Pass |
 | `SONG_NOT_FOUND` | `test_room_sync::test_bad_messages_get_error_and_socket_stays_up` (`song_change` to song 0) | "That song is no longer available." | Pass |
 | `ROOM_CLOSED` | `test_room_sync::test_playback_after_room_closed_meanwhile_gets_room_closed_then_1008` (error, then close `1008`) | "This room has been closed."; the page re-checks via REST | Pass |
+| `RATE_LIMITED` | `test_room_sync::test_chat_rate_limit_rejects_bursts` | "You're sending messages too quickly. Wait a moment." | Pass |
 
 ## Close codes and other failure paths
 

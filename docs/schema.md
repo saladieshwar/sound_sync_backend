@@ -1,6 +1,6 @@
 # Schema Note (DATA → BE)
 
-Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0006`.
+Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migration: `0008`.
 
 | Migration | Change |
 | --- | --- |
@@ -10,6 +10,8 @@ Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migr
 | `0004` | `recently_played`: replaces `ix_recently_played_user_played_at` with `ix_recently_played_user_played_at_id` (`user_id`, `played_at DESC`, `id DESC`), matching the history query's `ORDER BY` so the page is read straight off the index with no sort step |
 | `0005` | `songs`: stored generated column `search_text` = `lower(title ‖ chr(31) ‖ artist ‖ chr(31) ‖ coalesce(album, ''))` with one GIN trigram index `ix_songs_search_trgm`, replacing the three per-column trigram indexes. `musical_rooms`: indexes on `admin_user_id`, `controller_user_id`, `current_song_id` (deleting a user/song no longer scans every room) and partial `ix_musical_rooms_active_created_at` (`created_at DESC` where `status = 'active'`, the admin room list); `created_at` defaults to `clock_timestamp()` |
 | `0006` | `songs`: nullable `music_director` (≤ 200). `users`: nullable profile details `full_name` (≤ 100), `phone` (≤ 20), `bio` (≤ 300), `avatar_url` (≤ 500, a `/media/avatars/…` file). Adding nullable columns rewrites no rows; downgrade drops them |
+| `0007` | `media_files`: `key` (PK), `content_type`, `size`, `data`, `created_at` — uploads kept in the database when the host has no persistent disk |
+| `0008` | `room_messages`: group chat lines (`id`, `room_id`, `user_id`, `text` ≤ 300, `created_at`); index (`room_id`, `created_at DESC`, `id DESC`); cascades when the room or user is deleted; rows are also cleared when the room admin closes the room |
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
@@ -19,8 +21,9 @@ Source of truth: `alembic/versions/` (ORM mirror in `app/models/`). Current migr
 | `recently_played` | `id`, `user_id`, `song_id`, `played_at` | full play history (a replay adds a new row); index (`user_id`, `played_at DESC`, `id DESC`); index `song_id`; cascades on user/song delete |
 | `musical_rooms` | `id` (8-char Room ID), `name`, `admin_user_id`, `controller_user_id`, `current_song_id`, `is_playing`, `position_seconds`, `state_updated_at`, `status` | `status` enum: `active` / `closed`; deleting the admin user deletes the room (CASCADE); deleting the controller or current song sets them to NULL; indexes on all three foreign keys and on active rooms by `created_at DESC` |
 | `room_participants` | PK (`room_id`, `user_id`), `joined_at` | row deleted on leave; cascades on room delete and user delete; index `user_id` |
+| `room_messages` | `id`, `room_id`, `user_id`, `text`, `created_at` | last 50 lines are sent on `room_state`; deleted when the room closes or the room/user row is deleted; index (`room_id`, `created_at DESC`, `id DESC`) |
 
-Repository mapping (BE): `user_repo` → `users`; `song_repo` → `songs`; `library_repo` → `liked_songs`, `recently_played`; `room_repo` → `musical_rooms`, `room_participants`.
+Repository mapping (BE): `user_repo` → `users`; `song_repo` → `songs`; `library_repo` → `liked_songs`, `recently_played`; `room_repo` → `musical_rooms`, `room_participants`, `room_messages`.
 
 ## Catalog query rules (Phase 3)
 
@@ -72,6 +75,8 @@ Admin-leave rule: when the room admin leaves, the room is set to `closed`, `is_p
 
 Concurrency: leave, transfer-access, and every playback event lock the `musical_rooms` row (`SELECT … FOR UPDATE`), so a controller check and the state write it guards are atomic — a transfer that commits first always wins over a playback event from the old controller.
 
-Playback state written by RT (`room_service.apply_playback_event`): `song_change` sets `current_song_id` and `is_playing = true`; `play` / `pause` set `is_playing`; `seek` keeps it. `position_seconds` is clamped to `[0, duration_seconds]` and `state_updated_at` is set to the write time. Migrations: the room tables come from `0001`; Phase 5 needed no new migration; Phase 6 adds the room indexes in `0005`.
+Playback state written by RT (`room_service.apply_playback_event`): `song_change` sets `current_song_id` and `is_playing = true`; `play` / `pause` set `is_playing`; `seek` keeps it. `position_seconds` is clamped to `[0, duration_seconds]` and `state_updated_at` is set to the write time. Migrations: the room tables come from `0001`; Phase 5 needed no new migration; Phase 6 adds the room indexes in `0005`; group chat adds `room_messages` in `0008`.
 
-Evidence: `tests/test_rooms.py` (`test_leave_removes_participant_row`, `test_admin_leaving_closes_room_and_clears_participants`, `test_deleting_room_cascades_to_participants`, `test_controller_leaving_returns_control_to_admin`).
+Group chat: any participant may post a `chat_message` (1–300 characters, one per second per user). Lines are stored in `room_messages`, included as `recent_messages` on `room_state` (last 50), and deleted when the room admin closes the room.
+
+Evidence: `tests/test_rooms.py` (`test_leave_removes_participant_row`, `test_admin_leaving_closes_room_and_clears_participants`, `test_deleting_room_cascades_to_participants`, `test_controller_leaving_returns_control_to_admin`); chat: `tests/test_room_sync.py` (`test_chat_message_broadcasts_to_everyone_and_any_participant_can_send`, `test_chat_history_is_in_room_state_for_late_joiners`, `test_closing_the_room_clears_chat_history`).
